@@ -58,6 +58,32 @@
           <button onclick="submitData()" id="submit-btn">Add to Sheet</button>
         </div>
       </div>
+      <div class="search-section">
+    <h2>Search & Analyze Mutual Funds</h2>
+    <div class="search-box-container">
+        <input type="text" id="mf-search" placeholder="Type Fund Name (e.g. Parag Parikh...)" oninput="searchMF()">
+        <div id="search-results" class="search-suggestions"></div>
+    </div>
+
+    <div id="analysis-table-container" style="display: none;">
+        <table class="analysis-table">
+            <thead>
+                <tr>
+                    <th>Scheme Name</th>
+                    <th>Code</th>
+                    <th>1D</th>
+                    <th>1M</th>
+                    <th>3M</th>
+                    <th>6M</th>
+                    <th>1Y</th>
+                    <th>3Y</th>
+                    <th>5Y</th>
+                </tr>
+            </thead>
+            <tbody id="analysis-body"></tbody>
+        </table>
+    </div>
+</div>
       <div class="table-container">
         <table>
           <thead>
