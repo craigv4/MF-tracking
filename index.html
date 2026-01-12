@@ -45,15 +45,19 @@
           </select>
         </div>
       </div>
-<div class="form-card">
-    <h3>Add New Investment</h3>
-    <div class="form-grid">
-        <input type="text" id="form-date" placeholder="DD/MM/YYYY">
-        <input type="text" id="form-id" placeholder="Scheme ID">
-        <input type="number" id="form-units" step="0.001" placeholder="Units">
-        <button onclick="submitData()" id="submit-btn">Add to Sheet</button>
-    </div>
-</div>
+      <div class="form-card">
+        <h3>Add New Investment</h3>
+        <div class="form-grid">
+          <input type="text" id="form-date" placeholder="DD/MM/YYYY" />
+          <input type="text" id="form-id" placeholder="Scheme ID" />
+          <input
+            type="number"
+            id="form-units"
+            step="0.001"
+            placeholder="Units" />
+          <button onclick="submitData()" id="submit-btn">Add to Sheet</button>
+        </div>
+      </div>
       <div class="table-container">
         <table>
           <thead>
@@ -71,8 +75,11 @@
           <tbody id="portfolio-body"></tbody>
         </table>
       </div>
+      <div class="chart-container">
+        <canvas id="allocationChart"></canvas>
+      </div>
     </div>
-
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

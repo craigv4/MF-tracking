@@ -151,3 +151,31 @@ td:nth-child(8) {
     cursor: pointer;
     font-weight: bold;
 }
+/* Heatmap transition */
+.heatmap-cell {
+    transition: background 0.3s ease;
+    border-radius: 4px;
+    padding: 4px 8px;
+}
+
+/* Add a max-width to the chart so it doesn't expand infinitely */
+/* Default for Mobile (Small Screens) */
+.chart-container {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    /* Added margin-top to create space from the table */
+    margin: 40px auto 25px auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    position: relative;
+    height: 350px;
+}
+
+@media (min-width: 1024px) {
+    .chart-container {
+        height: 500px;
+        padding: 40px;
+        /* Larger gap for desktop screens */
+        margin-top: 60px;
+    }
+}
