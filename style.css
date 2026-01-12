@@ -123,59 +123,206 @@ td:nth-child(8) {
   text-align: right;
 }
 .form-card {
-    background: white;
-    padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 25px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 25px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .form-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 15px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
 }
 
 .form-grid input {
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    outline: none;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  outline: none;
 }
 
 #submit-btn {
-    background: var(--primary);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: bold;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
 }
 /* Heatmap transition */
 .heatmap-cell {
-    transition: background 0.3s ease;
-    border-radius: 4px;
-    padding: 4px 8px;
+  transition: background 0.3s ease;
+  border-radius: 4px;
+  padding: 4px 8px;
 }
 
 /* Add a max-width to the chart so it doesn't expand infinitely */
 /* Default for Mobile (Small Screens) */
 .chart-container {
-    background: white;
-    padding: 20px;
-    border-radius: 12px;
-    /* Added margin-top to create space from the table */
-    margin: 40px auto 25px auto;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    position: relative;
-    height: 350px;
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  /* Added margin-top to create space from the table */
+  margin: 40px auto 25px auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  position: relative;
+  height: 350px;
 }
 
 @media (min-width: 1024px) {
-    .chart-container {
-        height: 500px;
-        padding: 40px;
-        /* Larger gap for desktop screens */
-        margin-top: 60px;
+  .chart-container {
+    height: 500px;
+    padding: 40px;
+    /* Larger gap for desktop screens */
+    margin-top: 60px;
+  }
+}
+.search-section {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  margin-bottom: 25px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.search-box-container {
+  position: relative;
+  width: 100%;
+}
+
+#mf-search {
+  width: 97%;
+  padding: 12px;
+  border: 2px solid #eee;
+  border-radius: 8px;
+  font-size: 16px;
+  outline: none;
+}
+
+.search-suggestions {
+  position: absolute;
+  background: white;
+  border: 1px solid #ddd;
+  border-top: none;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  border-radius: 0 0 8px 8px;
+}
+
+.suggestion-item {
+  padding: 10px;
+  cursor: pointer;
+  border-bottom: 1px solid #f9f9f9;
+}
+
+.suggestion-item:hover {
+  background: #f0f7ff;
+}
+
+.analysis-table {
+  width: 100%;
+  margin-top: 20px;
+  border-top: 2px solid var(--primary);
+}
+.analysis-table th {
+  background: #f8f9fa;
+  color: #333;
+}
+.analysis-table th,
+.analysis-table td {
+  text-align: center; /* Centers text horizontally */
+  vertical-align: middle; /* Centers text vertically if row height varies */
+  padding: 12px 8px; /* Adds some breathing room */
+}
+.analysis-table td:first-child  {
+  text-align: left;
+  padding-left: 15px;
+}
+.analysis-table th:first-child {
+  text-align: left;
+  padding-left: 15px;
+}
+
+.ret-pos {
+  color: var(--success);
+  font-weight: bold;
+}
+.ret-neg {
+  color: var(--danger);
+  font-weight: bold;
+}
+/* The Main Container */
+.controls-bar {
+    display: flex;
+    justify-content: space-between; /* Pushes loading text left and sort right */
+    align-items: center;
+    background: white;
+    padding: 15px 25px;
+    border-radius: 12px;
+    margin-bottom: 25px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+/* Loading Text Styling */
+.loading-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: #4a5568; /* Slate gray */
+    font-style: italic;
+}
+
+/* Sort Group Alignment */
+.sort-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sort-group label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+/* Consistent Dropdown Design */
+#sort-select {
+    padding: 8px 12px;
+    border: 2px solid #edf2f7;
+    border-radius: 8px;
+    background-color: #f8fafc;
+    color: #2d3748;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+#sort-select:hover {
+    border-color: #cbd5e0;
+}
+
+#sort-select:focus {
+    border-color: #4299e1;
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+}
+
+/* Mobile Responsive View */
+@media (max-width: 600px) {
+    .controls-bar {
+        flex-direction: column;
+        gap: 12px;
+        padding: 15px;
+        text-align: center;
+    }
+    .sort-group {
+        width: 100%;
+        justify-content: center;
+    }
+    #sort-select {
+        flex-grow: 1;
     }
 }
