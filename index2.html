@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic MF Investment Tracker</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; padding: 20px; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .input-group { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; background: #e9ecef; padding: 15px; border-radius: 10px; }
+        input, select, button { padding: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #0056b3; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        .gain { color: green; font-weight: bold; }
+        .loss { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Add New Investment</h2>
+    <div class="input-group">
+        <select id="fund-select">
+            <option value="120505">Axis Midcap Fund - Direct Plan - Growth</option>
+            <option value="122639">Parag Parikh Flexi Cap Fund - Direct Plan - Growth</option>
+            <option value="125354">Axis Small Cap Fund - Direct Plan - Growth</option>
+            <option value="120684">ICICI Prudential Nifty Next 50 Index Fund - Direct Plan -  Growth</option>
+            <option value="120377">ICICI Prudential Balanced Advantage Fund - Direct Plan -  Growth</option>
+        </select>
+        <input type="date" id="buy-date">
+        <input type="number" id="units-bought" placeholder="Units (e.g. 150.5)" step="0.001">
+        <button onclick="addInvestment()">Add to Tracker</button>
+    </div>
+
+    <h3>My Portfolio</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Scheme</th>
+                <th>Invested (est.)</th>
+                <th>Current Value</th>
+                <th>Return %</th>
+            </tr>
+        </thead>
+        <tbody id="portfolio-body">
+            </tbody>
+    </table>
+</div>
+
+<script>
+    async function addInvestment() {
+        const id = document.getElementById('fund-select').value;
+        const name = document.getElementById('fund-select').options[document.getElementById('fund-select').selectedIndex].text;
+        const buyDateStr = document.getElementById('buy-date').value; // Format: YYYY-MM-DD
+        const units = parseFloat(document.getElementById('units-bought').value);
+
+        if (!buyDateStr || !units) return alert("Please fill all fields!");
+
+        // Convert YYYY-MM-DD to DD-MM-YYYY for matching with API data
+        const dateParts = buyDateStr.split("-");
+        const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+
+        try {
+            // Fetch ALL historical data
+            const res = await fetch(`https://api.mfapi.in/mf/${id}`);
+            const result = await res.json();
+            const history = result.data;
+
+            // 1. Find NAV on the day you bought it
+            const buyRecord = history.find(entry => entry.date === formattedDate);
+            if (!buyRecord) return alert("NAV not found for this date. (Likely a weekend/holiday)");
+
+            const buyNav = parseFloat(buyRecord.nav);
+            const investedAmount = buyNav * units;
+
+            // 2. Get Current NAV (always the first item in the list)
+            const currentNav = parseFloat(history[0].nav);
+            const currentValue = currentNav * units;
+            const returnPct = ((currentValue - investedAmount) / investedAmount) * 100;
+
+            // 3. Add to Table
+            const row = `
+                <tr>
+                    <td>${formattedDate}</td>
+                    <td>${name}</td>
+                    <td>₹${investedAmount.toFixed(0)} <br><small>(NAV: ${buyNav})</small></td>
+                    <td>₹${currentValue.toFixed(0)} <br><small>(NAV: ${currentNav})</small></td>
+                    <td class="${returnPct >= 0 ? 'gain' : 'loss'}">${returnPct.toFixed(2)}%</td>
+                </tr>
+            `;
+            document.getElementById('portfolio-body').innerHTML += row;
+
+        } catch (error) {
+            console.error("Error:", error);
+            alert("Could not fetch data.");
+        }
+    }
+</script>
+</body>
+</html>

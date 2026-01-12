@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mutual Fund Tracker Pro</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header class="header-box">
+        <h1>Portfolio Analytics Dashboard</h1>
+        <p>Real-time NAV Tracking & XIRR Calculation</p>
+        <button class="refresh-btn" onclick="init()">
+          🔄 Sync with Google Sheets
+        </button>
+      </header>
+
+      <div class="summary-grid">
+        <div class="stat-card">
+          <div class="stat-label">Total Invested</div>
+          <div id="total-invested" class="stat-value">₹0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Current Value</div>
+          <div id="total-current" class="stat-value">₹0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Portfolio XIRR</div>
+          <div id="total-xirr" class="stat-value highlight">0%</div>
+        </div>
+      </div>
+
+      <div class="controls-bar">
+        <div id="loading" class="loading-text">
+          Fetching latest market data...
+        </div>
+        <div class="sort-group">
+          <label for="sort-select">Sort By:</label>
+          <select id="sort-select" onchange="handleSort()">
+            <option value="name">Scheme Name (A-Z)</option>
+            <option value="invested">Invested Amount</option>
+            <option value="returnsRs">Profit/Loss (₹)</option>
+            <option value="xirr">XIRR %</option>
+          </select>
+        </div>
+      </div>
+<div class="form-card">
+    <h3>Add New Investment</h3>
+    <div class="form-grid">
+        <input type="text" id="form-date" placeholder="DD/MM/YYYY">
+        <input type="text" id="form-id" placeholder="Scheme ID">
+        <input type="number" id="form-units" step="0.001" placeholder="Units">
+        <button onclick="submitData()" id="submit-btn">Add to Sheet</button>
+    </div>
+</div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Scheme Name</th>
+              <th>Code</th>
+              <th>Units</th>
+              <th>Invested Value</th>
+              <th>Current Value</th>
+              <th>Returns (₹)</th>
+              <th>Abs. Ret %</th>
+              <th>XIRR %</th>
+            </tr>
+          </thead>
+          <tbody id="portfolio-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
