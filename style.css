@@ -123,59 +123,59 @@ td:nth-child(8) {
   text-align: right;
 }
 .form-card {
-    background: white;
-    padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 25px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 25px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .form-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 15px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
 }
 
 .form-grid input {
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    outline: none;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  outline: none;
 }
 
 #submit-btn {
-    background: var(--primary);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: bold;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
 }
 /* Heatmap transition */
 .heatmap-cell {
-    transition: background 0.3s ease;
-    border-radius: 4px;
-    padding: 4px 8px;
+  transition: background 0.3s ease;
+  border-radius: 4px;
+  padding: 4px 8px;
 }
 
 /* Add a max-width to the chart so it doesn't expand infinitely */
 /* Default for Mobile (Small Screens) */
 .chart-container {
-    background: white;
-    padding: 20px;
-    border-radius: 12px;
-    /* Added margin-top to create space from the table */
-    margin: 40px auto 25px auto;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    position: relative;
-    height: 350px;
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  /* Added margin-top to create space from the table */
+  margin: 40px auto 25px auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  position: relative;
+  height: 350px;
 }
 
 @media (min-width: 1024px) {
-    .chart-container {
-        height: 500px;
-        padding: 40px;
-        /* Larger gap for desktop screens */
-        margin-top: 60px;
-    }
+  .chart-container {
+    height: 500px;
+    padding: 40px;
+    /* Larger gap for desktop screens */
+    margin-top: 60px;
+  }
 }
