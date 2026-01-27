@@ -9,6 +9,26 @@ let allocationChart = null;
 let historyChartInstance = null;
 let searchTimeout;
 
+// --- 1. THEME ENGINE ---
+function initTheme() {
+  const savedTheme = localStorage.getItem("theme") || "light";
+  document.documentElement.setAttribute("data-theme", savedTheme);
+  updateThemeIcon(savedTheme);
+}
+
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute("data-theme");
+  const targetTheme = currentTheme === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", targetTheme);
+  localStorage.setItem("theme", targetTheme);
+  updateThemeIcon(targetTheme);
+}
+
+function updateThemeIcon(theme) {
+  const icon = document.getElementById("theme-icon");
+  if (icon) icon.innerText = theme === "dark" ? "☀️" : "🌙";
+}
+
 // --- 1. XIRR ENGINE (Newton-Raphson Method) ---
 function calculateXIRR(cashFlows) {
   if (cashFlows.length < 2) return 0;
