@@ -12,38 +12,43 @@
         <h1>Portfolio Analytics Dashboard</h1>
         <p>Real-time NAV Tracking & XIRR Calculation</p>
         <div class="header-actions">
-          <button class="refresh-btn" onclick="init()">🔄 Sync Data</button>
-          <button id="theme-toggle" class="btn-secondary" onclick="toggleTheme()">
+          <button class="refresh-btn" onclick="init()">Sync Data</button>
+          <button
+            id="theme-toggle"
+            class="btn-secondary"
+            onclick="toggleTheme()">
             <span id="theme-icon">🌙</span>
           </button>
         </div>
       </header>
 
       <div class="summary-grid">
-  <div class="stat-card">
-    <div class="stat-label">Total Invested</div>
-    <div id="total-invested" class="stat-value">₹0</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Current Value</div>
-    <div id="total-current" class="stat-value">₹0</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Total Profit/Loss</div>
-    <div id="total-profit" class="stat-value">₹0</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Day's Change</div>
-    <div id="total-day-change" class="stat-value">—</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Portfolio XIRR</div>
-    <div id="total-xirr" class="stat-value highlight">0%</div>
-  </div>
-</div>
+        <div class="stat-card">
+          <div class="stat-label">Total Invested</div>
+          <div id="total-invested" class="stat-value">₹0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Current Value</div>
+          <div id="total-current" class="stat-value">₹0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Profit/Loss</div>
+          <div id="total-profit" class="stat-value">₹0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Day's Change</div>
+          <div id="total-day-change" class="stat-value">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Portfolio XIRR</div>
+          <div id="total-xirr" class="stat-value highlight">0%</div>
+        </div>
+      </div>
 
       <div class="controls-bar">
-        <div id="loading" class="loading-text" style="display:none;">Fetching market data...</div>
+        <div id="loading" class="loading-text" style="display: none">
+          Fetching market data...
+        </div>
         <div class="sort-group">
           <label for="sort-select">Sort By:</label>
           <select id="sort-select" onchange="handleSort()">
@@ -60,7 +65,11 @@
         <div class="form-grid">
           <input type="text" id="form-date" placeholder="DD/MM/YYYY" />
           <input type="text" id="form-id" placeholder="Scheme ID" />
-          <input type="number" id="form-units" step="0.001" placeholder="Units" />
+          <input
+            type="number"
+            id="form-units"
+            step="0.001"
+            placeholder="Units" />
           <button onclick="submitData()" id="submit-btn">Add to Sheet</button>
         </div>
       </div>
@@ -111,11 +120,36 @@
           <tbody id="portfolio-body"></tbody>
         </table>
       </div>
-
+      <div
+        id="history-section"
+        class="form-card"
+        style="display: none; margin-top: 25px">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          ">
+          <h3>Performance Timeline: <span id="history-fund-name"></span></h3>
+          <button
+            onclick="
+              document.getElementById('history-section').style.display = 'none'
+            "
+            style="background: var(--te); font-size: 12px; padding: 5px 10px">
+            Close
+          </button>
+        </div>
+        <div
+          class="line-chart-container"
+          style="height: 400px; position: relative">
+          <canvas id="historyChart"></canvas>
+        </div>
+      </div>
       <div class="chart-container">
         <canvas id="allocationChart"></canvas>
       </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="script.js"></script>
   </body>

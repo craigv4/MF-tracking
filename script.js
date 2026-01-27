@@ -1,3 +1,4 @@
+// --- CONFIGURATION ---
 const SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vQqGiMZpcrNGa6vTUxck82cFgTbC3FSTMlQm69T5buwWl_znhJg_PozTOOO2oof3xGV55JVj-AEEvf1/pub?gid=0&single=true&output=csv";
 const SCRIPT_URL =
@@ -5,7 +6,7 @@ const SCRIPT_URL =
 
 let globalData = [];
 let allocationChart = null;
-let growthChart = null;
+let historyChartInstance = null;
 let searchTimeout;
 
 // --- 1. XIRR ENGINE (Newton-Raphson Method) ---
@@ -38,15 +39,6 @@ function getHeatmapColor(value) {
   return "rgba(231, 76, 60, 0.1)";
 }
 
-function toggleTheme() {
-  const currentTheme = document.documentElement.getAttribute("data-theme");
-  const targetTheme = currentTheme === "dark" ? "light" : "dark";
-  document.documentElement.setAttribute("data-theme", targetTheme);
-  localStorage.setItem("theme", targetTheme);
-  const icon = document.getElementById("theme-icon");
-  if (icon) icon.innerText = targetTheme === "dark" ? "☀️" : "🌙";
-}
-
 // --- 3. DATA FETCHING & GROUPING ---
 async function init() {
   const loading = document.getElementById("loading");
@@ -60,16 +52,12 @@ async function init() {
       .filter((r) => r.trim() !== "")
       .slice(1);
 
-    // 1. RAW SUMMING (The Console Logic)
-    // We sum everything locally first so no units are lost.
     let localTotals = {};
     rows.forEach((row) => {
       const [dateStr, id, unitsStr] = row.split(",").map((c) => c.trim());
       if (!id || isNaN(parseFloat(unitsStr))) return;
 
-      if (!localTotals[id]) {
-        localTotals[id] = { units: 0, transactions: [] };
-      }
+      if (!localTotals[id]) localTotals[id] = { units: 0, transactions: [] };
       localTotals[id].units += parseFloat(unitsStr);
       localTotals[id].transactions.push({
         dateStr,
@@ -77,22 +65,17 @@ async function init() {
       });
     });
 
-    // 2. API ENRICHMENT
-    // Now we fetch data only ONCE per unique ID.
     let portfolioArray = [];
-    const uniqueIds = Object.keys(localTotals);
-
-    for (const id of uniqueIds) {
+    for (const id in localTotals) {
       const res = await fetch(`https://api.mfapi.in/mf/${id}`);
       const json = await res.json();
+      if (!json || !json.data) continue;
 
       const currentNav = parseFloat(json.data[0].nav);
       const prevNav = json.data[1] ? parseFloat(json.data[1].nav) : currentNav;
-
       let totalInvested = 0;
-      let flows = [];
+      let transactionHistory = [];
 
-      // Calculate invested amount for each transaction in this group
       localTotals[id].transactions.forEach((tx) => {
         const [d, m, y] = tx.dateStr.replaceAll("/", "-").split("-");
         const dateKey = `${d}-${m}-${y}`;
@@ -101,23 +84,29 @@ async function init() {
         if (buyRec) {
           const cost = parseFloat(buyRec.nav) * tx.units;
           totalInvested += cost;
-          flows.push({ date: new Date(y, m - 1, d), amount: -cost });
+          // Cash flow logic: Outflow (investment) is negative
+          transactionHistory.push({
+            date: new Date(y, m - 1, d),
+            amount: -cost,
+            units: tx.units,
+          });
         }
       });
 
       portfolioArray.push({
         name: json.meta.scheme_name,
         code: id,
-        units: localTotals[id].units, // This now matches your console exactly
+        units: localTotals[id].units,
         invested: totalInvested,
         currentNav: currentNav,
         prevNav: prevNav,
-        flows: flows,
+        transactions: transactionHistory,
+        navHistory: json.data,
       });
     }
 
     globalData = portfolioArray;
-    handleSort(); // Triggers renderTable()
+    handleSort();
   } catch (err) {
     console.error("Calculation Error:", err);
   } finally {
@@ -139,11 +128,11 @@ function handleSort() {
       bVal = b.currentNav * b.units - b.invested;
     } else if (sortBy === "xirr") {
       aVal = calculateXIRR([
-        ...a.flows,
+        ...a.transactions,
         { date: new Date(), amount: a.currentNav * a.units },
       ]);
       bVal = calculateXIRR([
-        ...b.flows,
+        ...b.transactions,
         { date: new Date(), amount: b.currentNav * b.units },
       ]);
     }
@@ -168,18 +157,20 @@ function renderTable() {
     const dayChangeRs = curVal - prevVal;
     const dayChangePct = ((f.currentNav - f.prevNav) / f.prevNav) * 100;
     const xirr = calculateXIRR([
-      ...f.flows,
+      ...f.transactions,
       { date: new Date(), amount: curVal },
     ]);
 
     gInv += f.invested;
     gCur += curVal;
     gPrevValTotal += prevVal;
-    gFlows.push(...f.flows);
+    gFlows.push(...f.transactions);
 
     html += `
-    <tr>
-        <td><strong>${f.name}</strong></td>
+      <tr>
+        <td onclick="showHistoryChart('${f.code}')" style="cursor:pointer; color:var(--primary); text-decoration:underline;">
+            <strong>${f.name}</strong>
+        </td>
         <td>${f.code}</td>
         <td>${f.units.toFixed(3)}</td>
         <td>₹${Math.round(f.invested).toLocaleString("en-IN")}</td>
@@ -188,7 +179,7 @@ function renderTable() {
         <td class="${retRs >= 0 ? "gain" : "loss"}">₹${Math.round(retRs).toLocaleString("en-IN")}</td>
         <td class="${absPct >= 0 ? "gain" : "loss"}">${absPct.toFixed(2)}%</td>
         <td style="background-color: ${getHeatmapColor(xirr)}; font-weight:bold; text-align:right;">${xirr.toFixed(2)}%</td>
-    </tr>`;
+      </tr>`;
   });
 
   tbody.innerHTML = html;
@@ -196,25 +187,25 @@ function renderTable() {
     "₹" + Math.round(gInv).toLocaleString("en-IN");
   document.getElementById("total-current").innerText =
     "₹" + Math.round(gCur).toLocaleString("en-IN");
-  
+
   const totalProfit = gCur - gInv;
-  const profitElem = document.getElementById("total-profit");
-  if (profitElem) {
-    profitElem.className = `stat-value ${totalProfit >= 0 ? "gain" : "loss"}`;
-    profitElem.innerText =
-      "₹" + Math.round(totalProfit).toLocaleString("en-IN");
+  const pElem = document.getElementById("total-profit");
+  if (pElem) {
+    pElem.innerText = "₹" + Math.round(totalProfit).toLocaleString("en-IN");
+    pElem.className = `stat-value ${totalProfit >= 0 ? "gain" : "loss"}`;
   }
-  const totalDayChangeRs = gCur - gPrevValTotal;
-  const totalDayChangePct = (totalDayChangeRs / gPrevValTotal) * 100;
-  const dayChangeElem = document.getElementById("total-day-change");
-  if (dayChangeElem) {
-    dayChangeElem.className = `stat-value ${totalDayChangeRs >= 0 ? "gain" : "loss"}`;
-    dayChangeElem.innerText = `₹${Math.round(totalDayChangeRs).toLocaleString("en-IN")} (${totalDayChangePct.toFixed(2)}%)`;
+
+  const dcRs = gCur - gPrevValTotal;
+  const dcPct = (dcRs / gPrevValTotal) * 100;
+  const dcElem = document.getElementById("total-day-change");
+  if (dcElem) {
+    dcElem.innerText = `₹${Math.round(dcRs).toLocaleString("en-IN")} (${dcPct.toFixed(2)}%)`;
+    dcElem.className = `stat-value ${dcRs >= 0 ? "gain" : "loss"}`;
   }
+
   document.getElementById("total-xirr").innerText =
     calculateXIRR([...gFlows, { date: new Date(), amount: gCur }]).toFixed(2) +
     "%";
-
   updateCharts();
 }
 
@@ -254,7 +245,104 @@ function updateCharts() {
   }
 }
 
-// --- 6. SEARCH & ANALYSIS ---
+// --- 6. PERFORMANCE TIMELINE CHART ---
+async function showHistoryChart(schemeCode) {
+  const fund = globalData.find((f) => f.code === schemeCode);
+  const section = document.getElementById("history-section");
+  const canvas = document.getElementById("historyChart");
+  if (!fund || !canvas || !fund.transactions) return;
+
+  section.style.display = "block";
+  document.getElementById("history-fund-name").innerText = fund.name;
+  section.scrollIntoView({ behavior: "smooth" });
+
+  try {
+    const ctx = canvas.getContext("2d");
+    const sortedFlows = [...fund.transactions].sort((a, b) => a.date - b.date);
+    const startDate = sortedFlows[0].date;
+
+    const timeline = fund.navHistory
+      .map((d) => {
+        const [day, month, year] = d.date.split("-");
+        return { date: new Date(year, month - 1, day), nav: parseFloat(d.nav) };
+      })
+      .filter((d) => d.date >= startDate)
+      .reverse();
+
+    let labels = [],
+      invData = [],
+      curData = [];
+    let runningUnits = 0,
+      runningInv = 0;
+
+    timeline.forEach((tp) => {
+      sortedFlows.forEach((flow) => {
+        if (flow.date.toDateString() === tp.date.toDateString()) {
+          runningUnits += flow.units; // Subtracts if units is negative
+          if (flow.units > 0) runningInv += Math.abs(flow.amount);
+          else {
+            const unitsBefore = runningUnits - flow.units;
+            runningInv -=
+              (runningInv / (unitsBefore || 1)) * Math.abs(flow.units);
+          }
+        }
+      });
+      labels.push(
+        tp.date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+      );
+      invData.push(Math.round(runningInv));
+      curData.push(Math.round(runningUnits * tp.nav));
+    });
+
+    if (historyChartInstance) historyChartInstance.destroy();
+    historyChartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: "Current Value",
+            data: curData,
+            borderColor: "#4299e1",
+            backgroundColor: "rgba(66, 153, 225, 0.1)",
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+          },
+          {
+            label: "Invested Value",
+            data: invData,
+            borderColor: "#a0aec0",
+
+            fill: false,
+            tension: 0,
+            pointRadius: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          y: { ticks: { callback: (v) => "₹" + v.toLocaleString("en-IN") } },
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: (i) =>
+                `${i.dataset.label}: ₹${i.raw.toLocaleString("en-IN")}`,
+            },
+          },
+        },
+      },
+    });
+  } catch (err) {
+    console.error("Chart Render Failed:", err);
+  }
+}
+
+// --- 7. UTILITIES: SEARCH, ANALYZE, SUBMIT ---
 async function searchMF() {
   const query = document.getElementById("mf-search").value;
   const resultsDiv = document.getElementById("search-results");
@@ -270,10 +358,8 @@ async function searchMF() {
       const data = await response.json();
       resultsDiv.innerHTML = data
         .map(
-          (item) => `
-        <div class="suggestion-item" onclick="analyzeFund('${item.schemeCode}', '${item.schemeName.replace(/'/g, "\\'")}')">
-          ${item.schemeName} (${item.schemeCode})
-        </div>`,
+          (item) =>
+            `<div class="suggestion-item" onclick="analyzeFund('${item.schemeCode}', '${item.schemeName.replace(/'/g, "\\'")}')">${item.schemeName} (${item.schemeCode})</div>`,
         )
         .join("");
     } catch (e) {
@@ -302,17 +388,11 @@ async function analyzeFund(code, name) {
     return `<span class="${ret >= 0 ? "gain" : "loss"}">${ret.toFixed(2)}%</span>`;
   };
 
-  document.getElementById("analysis-body").innerHTML = `
-    <tr>
-      <td>${name}</td><td>${code}</td>
-      <td>${calculateReturn(1)}</td><td>${calculateReturn(30)}</td>
-      <td>${calculateReturn(365)}</td><td>${calculateReturn(1095)}</td>
-      <td>${calculateReturn(1825)}</td>
-    </tr>`;
+  document.getElementById("analysis-body").innerHTML =
+    `<tr><td>${name}</td><td>${code}</td><td>${calculateReturn(1)}</td><td>${calculateReturn(30)}</td><td>${calculateReturn(365)}</td><td>${calculateReturn(1095)}</td><td>${calculateReturn(1825)}</td></tr>`;
   document.getElementById("analysis-table-container").style.display = "block";
 }
 
-// --- 7. SUBMISSION ---
 async function submitData() {
   const btn = document.getElementById("submit-btn");
   const data = {
