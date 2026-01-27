@@ -196,7 +196,14 @@ function renderTable() {
     "₹" + Math.round(gInv).toLocaleString("en-IN");
   document.getElementById("total-current").innerText =
     "₹" + Math.round(gCur).toLocaleString("en-IN");
-
+  
+  const totalProfit = gCur - gInv;
+  const profitElem = document.getElementById("total-profit");
+  if (profitElem) {
+    profitElem.className = `stat-value ${totalProfit >= 0 ? "gain" : "loss"}`;
+    profitElem.innerText =
+      "₹" + Math.round(totalProfit).toLocaleString("en-IN");
+  }
   const totalDayChangeRs = gCur - gPrevValTotal;
   const totalDayChangePct = (totalDayChangeRs / gPrevValTotal) * 100;
   const dayChangeElem = document.getElementById("total-day-change");
