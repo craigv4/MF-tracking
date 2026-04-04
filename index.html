@@ -1,156 +1,72 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mutual Fund Tracker Pro</title>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WealthInsight Pro</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
     <div class="container">
-      <header class="header-box">
-        <h1>Portfolio Analytics Dashboard</h1>
-        <p>Real-time NAV Tracking & XIRR Calculation</p>
-        <div class="header-actions">
-          <button class="refresh-btn" onclick="init()">Sync Data</button>
-          <button
-            id="theme-toggle"
-            class="btn-secondary"
-            onclick="toggleTheme()">
-            <span id="theme-icon">🌙</span>
-          </button>
-        </div>
-      </header>
+        <header class="header-box">
+            <h1 style="font-weight: 800; letter-spacing: -0.02em;">WealthInsight <span style="font-weight: 400; opacity: 0.8;">Pro</span></h1>
+            <div class="header-actions" style="margin-top: 20px;">
+                <button class="refresh-btn" onclick="init()">Sync Portfolio</button>
+                <button id="theme-toggle" onclick="toggleTheme()">
+                    <span id="theme-icon">🌙</span>
+                </button>
+            </div>
+        </header>
 
-      <div class="summary-grid">
-        <div class="stat-card">
-          <div class="stat-label">Total Invested</div>
-          <div id="total-invested" class="stat-value">₹0</div>
+        <div class="summary-grid">
+            <div class="stat-card"><div class="stat-label">Invested</div><div id="total-invested" class="stat-value">₹0</div></div>
+            <div class="stat-card"><div class="stat-label">Current Value</div><div id="total-current" class="stat-value">₹0</div></div>
+            <div class="stat-card"><div class="stat-label">Total Gains</div><div id="total-profit" class="stat-value">₹0</div></div>
+            <div class="stat-card"><div class="stat-label">Day's Change</div><div id="total-day-change" class="stat-value">₹0</div></div>
+            <div class="stat-card"><div class="stat-label">XIRR</div><div id="total-xirr" class="stat-value" style="color: #6366f1">0%</div></div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Current Value</div>
-          <div id="total-current" class="stat-value">₹0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Total Profit/Loss</div>
-          <div id="total-profit" class="stat-value">₹0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Day's Change</div>
-          <div id="total-day-change" class="stat-value">—</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Portfolio XIRR</div>
-          <div id="total-xirr" class="stat-value highlight">0%</div>
-        </div>
-      </div>
 
-      <div class="controls-bar">
-        <div id="loading" class="loading-text" style="display: none">
-          Fetching market data...
+        <div class="form-card" id="total-history-section" style="margin-top: 30px;">
+            <div class="chart-header">
+                <h2 style="margin:0; font-size: 1.25rem;">Portfolio Growth</h2>
+                <div class="filter-group">
+                    <button class="filter-btn" onclick="renderTotalHistoryChart(90)">3M</button>
+                    <button class="filter-btn" onclick="renderTotalHistoryChart(180)">6M</button>
+                    <button class="filter-btn" onclick="renderTotalHistoryChart(365)">1Y</button>
+                    <button class="filter-btn active" onclick="renderTotalHistoryChart('all')">ALL</button>
+                </div>
+            </div>
+            <div class="line-chart-container"><canvas id="totalHistoryChart"></canvas></div>
         </div>
-        <div class="sort-group">
-          <label for="sort-select">Sort By:</label>
-          <select id="sort-select" onchange="handleSort()">
-            <option value="name">Scheme Name (A-Z)</option>
-            <option value="invested">Invested Amount</option>
-            <option value="returnsRs">Profit/Loss (₹)</option>
-            <option value="xirr">XIRR %</option>
-          </select>
-        </div>
-      </div>
 
-      <div class="form-card">
-        <h3>Add New Investment</h3>
-        <div class="form-grid">
-          <input type="text" id="form-date" placeholder="DD/MM/YYYY" />
-          <input type="text" id="form-id" placeholder="Scheme ID" />
-          <input
-            type="number"
-            id="form-units"
-            step="0.001"
-            placeholder="Units" />
-          <button onclick="submitData()" id="submit-btn">Add to Sheet</button>
-        </div>
-      </div>
-
-      <!-- <div class="search-section">
-        <h2>Search & Analyze Funds</h2>
-        <div class="search-box-container">
-          <input type="text" id="mf-search" placeholder="Type Fund Name..." oninput="searchMF()" />
-          <div id="search-results" class="search-suggestions"></div>
-        </div>
-        <div id="analysis-table-container" style="display: none">
-          <div class="table-container">
-            <table class="analysis-table">
-              <thead>
-                <tr>
-                  <th>Scheme Name</th>
-                  <th>Code</th>
-                  <th>1D</th>
-                  <th>1M</th>
-                  <th>3M</th>
-                  <th>6M</th>
-                  <th>1Y</th>
-                  <th>3Y</th>
-                  <th>5Y</th>
-                </tr>
-              </thead>
-              <tbody id="analysis-body"></tbody>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Scheme</th>
+                        <th>Units</th>
+                        <th>Invested</th>
+                        <th>Value</th>
+                        <th>1D Change</th>
+                        <th>Returns</th>
+                        <th>XIRR</th>
+                    </tr>
+                </thead>
+                <tbody id="portfolio-body"></tbody>
             </table>
-          </div>
         </div>
-      </div> -->
 
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Scheme Name</th>
-              <th>Code</th>
-              <th>Units</th>
-              <th>Invested Value</th>
-              <th>Current Value</th>
-              <th>1D Change (%)</th>
-              <th>Returns (₹)</th>
-              <th>Abs. Ret %</th>
-              <th>XIRR %</th>
-            </tr>
-          </thead>
-          <tbody id="portfolio-body"></tbody>
-        </table>
-      </div>
-      <div
-        id="history-section"
-        class="form-card"
-        style="display: none; margin-top: 25px">
-        <div
-          style="
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          ">
-          <h3>Performance Timeline: <span id="history-fund-name"></span></h3>
-          <button
-            onclick="
-              document.getElementById('history-section').style.display = 'none'
-            "
-            style="background: var(--te); font-size: 12px; padding: 5px 10px">
-            Close
-          </button>
+        <div id="history-section" class="form-card" style="display: none; margin-top: 30px;">
+            <div class="chart-header">
+                <h3><span id="history-fund-name"></span> Timeline</h3>
+                <div class="filter-group" id="fund-filters"></div>
+                <button onclick="document.getElementById('history-section').style.display = 'none'" class="btn-close">✕</button>
+            </div>
+            <div class="line-chart-container"><canvas id="historyChart"></canvas></div>
         </div>
-        <div
-          class="line-chart-container"
-          style="height: 400px; position: relative">
-          <canvas id="historyChart"></canvas>
-        </div>
-      </div>
-      <div class="chart-container">
-        <canvas id="allocationChart"></canvas>
-      </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="script.js"></script>
-  </body>
+</body>
 </html>
