@@ -188,7 +188,7 @@ function renderTable() {
 
     html += `
       <tr>
-        <td onclick="showHistoryChart('${f.code}')" style="cursor:pointer; color:var(--primary); text-decoration:underline;">
+        <td onclick="showHistoryChart('${f.code}')" style="cursor:pointer; color:var(--text-main); text-decoration:underline;">
             <strong>${f.name}</strong>
         </td>
         <td>${f.code}</td>
@@ -308,7 +308,7 @@ async function showHistoryChart(schemeCode) {
         }
       });
       labels.push(
-        tp.date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+        tp.date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }),
       );
       invData.push(Math.round(runningInv));
       curData.push(Math.round(runningUnits * tp.nav));
