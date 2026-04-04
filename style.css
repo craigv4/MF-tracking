@@ -104,14 +104,14 @@ td:last-child { border-radius: 0 12px 12px 0; }
 }
 
 #theme-toggle {
-  background: white;
-  color: var(--primary);
-  width: 45px;
-  height: 45px;
+background: rgba(255,255,255,0.2);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: white;
+  padding: 12px 24px;
   border-radius: 14px;
-  border: none;
-  font-size: 20px;
   cursor: pointer;
+  font-weight: 600;
 }
 
 .btn-close { cursor:pointer; border:none; background:none; color:var(--danger); font-weight:800; font-size: 20px; }
