@@ -1,9 +1,25 @@
 const SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vQqGiMZpcrNGa6vTUxck82cFgTbC3FSTMlQm69T5buwWl_znhJg_PozTOOO2oof3xGV55JVj-AEEvf1/pub?gid=0&single=true&output=csv";
+const SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbzCMQ8n2nXcF7x8Rm-7g6isvcXAFc0RrrRpae6-ZNlKXgWwW7Ihn9tlgv8d9w4AZwvslg/exec";
 
 let globalData = [];
 let totalHistoryChartInstance = null;
 let historyChartInstance = null;
+let currentTotalDays = "all";
+let currentFundDays = "all";
+
+// Centralized style config for absolute consistency
+const CHART_CONFIG = {
+  tension: 0.4,
+  borderWidth: 3,
+  pointRadius: 0,
+  fill: true,
+  valueColor: "#6366f1",
+  valueBg: "rgba(99, 102, 241, 0.05)",
+  costColor: "#94a3b8",
+  costWidth: 2,
+};
 
 function initTheme() {
   const savedTheme = localStorage.getItem("theme") || "light";
@@ -21,6 +37,57 @@ function toggleTheme() {
     target === "dark" ? "☀️" : "🌙";
 }
 
+function resetForm() {
+  document.getElementById("form-id").value = "";
+  document.getElementById("form-units").value = "";
+  document.getElementById("form-price").value = "";
+  document.getElementById("form-date").value = "";
+  document.getElementById("add-form").classList.add("hidden");
+}
+
+async function submitData() {
+  const btn = document.getElementById("submit-btn");
+  const rawDate = document.getElementById("form-date").value;
+  const schemeId = document.getElementById("form-id").value;
+  const units = document.getElementById("form-units").value;
+  const price = document.getElementById("form-price").value;
+
+  if (!rawDate || !schemeId || !units)
+    return alert("Please fill Date, Scheme Code, and Units.");
+
+  const [year, month, day] = rawDate.split("-");
+  const formattedDate = `${day}/${month}/${year}`;
+
+  const payload = {
+    date: formattedDate,
+    id: schemeId,
+    units: parseFloat(units),
+    price: price ? parseFloat(price) : 0,
+  };
+
+  btn.innerText = "Syncing...";
+  btn.disabled = true;
+
+  try {
+    await fetch(SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      cache: "no-cache",
+      body: JSON.stringify(payload),
+    });
+    alert("Transaction recorded!");
+    resetForm();
+    setTimeout(() => {
+      init();
+    }, 2000);
+  } catch (err) {
+    alert("Connection error.");
+  } finally {
+    btn.innerText = "Submit to Sheet";
+    btn.disabled = false;
+  }
+}
+
 async function init() {
   initTheme();
   try {
@@ -33,13 +100,20 @@ async function init() {
     let localTotals = {};
 
     rows.forEach((row) => {
-      const [dateStr, id, unitsStr] = row.split(",").map((c) => c.trim());
+      const cols = row.split(",").map((c) => c.trim());
+      const [dateStr, id, unitsStr, priceStr, stampStr, nameStr] = cols;
       if (!id || isNaN(parseFloat(unitsStr))) return;
-      if (!localTotals[id]) localTotals[id] = { units: 0, transactions: [] };
-      localTotals[id].units += parseFloat(unitsStr);
+
+      if (!localTotals[id])
+        localTotals[id] = { units: 0, transactions: [], fallbackName: nameStr };
+      const units = parseFloat(unitsStr),
+        price = parseFloat(priceStr) || 0;
       localTotals[id].transactions.push({
         dateStr,
-        units: parseFloat(unitsStr),
+        units,
+        price,
+        value: units * price,
+        stamp: parseFloat(stampStr) || 0,
       });
     });
 
@@ -47,36 +121,45 @@ async function init() {
     for (const id in localTotals) {
       const res = await fetch(`https://api.mfapi.in/mf/${id}`);
       const json = await res.json();
-      if (!json || !json.data) continue;
+      const currentNav = json.data ? parseFloat(json.data[0].nav) : 0;
+      const prevNav =
+        json.data && json.data[1] ? parseFloat(json.data[1].nav) : currentNav;
 
-      const currentNav = parseFloat(json.data[0].nav);
-      const prevNav = json.data[1] ? parseFloat(json.data[1].nav) : currentNav;
-      let totalInvested = 0,
-        transactions = [];
-
-      localTotals[id].transactions.forEach((tx) => {
-        const [d, m, y] = tx.dateStr.replaceAll("/", "-").split("-");
-        const buyRec = json.data.find((e) => e.date === `${d}-${m}-${y}`);
-        if (buyRec) {
-          const cost = parseFloat(buyRec.nav) * tx.units;
-          totalInvested += cost;
-          transactions.push({
-            date: new Date(y, m - 1, d),
-            amount: -cost,
-            units: tx.units,
-          });
-        }
-      });
+      let netInv = 0,
+        rUnits = 0,
+        txs = [],
+        tStamp = 0;
+      localTotals[id].transactions
+        .sort((a, b) => {
+          const [d1, m1, y1] = a.dateStr.split(/[-/]/);
+          const [d2, m2, y2] = b.dateStr.split(/[-/]/);
+          return new Date(y1, m1 - 1, d1) - new Date(y2, m2 - 1, d2);
+        })
+        .forEach((tx) => {
+          const [d, m, y] = tx.dateStr.split(/[-/]/);
+          const dateObj = new Date(y, m - 1, d);
+          if (tx.units > 0) {
+            netInv += Math.abs(tx.value);
+            rUnits += tx.units;
+          } else {
+            const avg = rUnits > 0 ? netInv / rUnits : 0;
+            netInv -= avg * Math.abs(tx.units);
+            rUnits += tx.units;
+          }
+          tStamp += tx.stamp;
+          txs.push({ date: dateObj, amount: -tx.value, units: tx.units });
+        });
 
       portfolioArray.push({
-        name: json.meta.scheme_name,
+        name: json.meta ? json.meta.scheme_name : localTotals[id].fallbackName,
         code: id,
-        units: localTotals[id].units,
-        invested: totalInvested,
+        units: rUnits,
+        invested: netInv,
+        stampDuty: tStamp,
         currentNav,
         prevNav,
-        transactions,
-        navHistory: json.data,
+        transactions: txs,
+        navHistory: json.data || [],
       });
     }
     globalData = portfolioArray;
@@ -84,6 +167,33 @@ async function init() {
   } catch (err) {
     console.error(err);
   }
+}
+
+function getPortfolioValueAt(daysAgo) {
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() - daysAgo);
+  let totalVal = 0;
+
+  globalData.forEach((fund) => {
+    let unitsAtTime = 0;
+    fund.transactions.forEach((tx) => {
+      if (tx.date <= targetDate) unitsAtTime += tx.units;
+    });
+    if (unitsAtTime <= 0) return;
+
+    const histEntry = fund.navHistory.find((h) => {
+      const [d, m, y] = h.date.split("-");
+      return new Date(y, m - 1, d) <= targetDate;
+    });
+
+    const nav = histEntry
+      ? parseFloat(histEntry.nav)
+      : fund.navHistory.length > 0
+        ? parseFloat(fund.navHistory[fund.navHistory.length - 1].nav)
+        : 0;
+    totalVal += unitsAtTime * nav;
+  });
+  return totalVal;
 }
 
 function renderTable() {
@@ -98,19 +208,19 @@ function renderTable() {
     const curVal = f.currentNav * f.units;
     const prevVal = f.prevNav * f.units;
     const retRs = curVal - f.invested;
-    const dayChangePct = ((f.currentNav - f.prevNav) / f.prevNav) * 100;
-
+    const dayPct =
+      f.prevNav !== 0 ? ((f.currentNav - f.prevNav) / f.prevNav) * 100 : 0;
     gInv += f.invested;
     gCur += curVal;
     gPrevTotal += prevVal;
     gFlows.push(...f.transactions);
 
     html += `<tr onclick="showHistoryChart('${f.code}', 'all')">
-            <td><strong>${f.name}</strong></td>
+            <td><strong>${f.name}</strong><br><span class="code-badge">${f.code}</span></td>
             <td>${f.units.toFixed(3)}</td>
             <td>₹${Math.round(f.invested).toLocaleString("en-IN")}</td>
             <td>₹${Math.round(curVal).toLocaleString("en-IN")}</td>
-            <td class="${dayChangePct >= 0 ? "gain" : "loss"}">${dayChangePct.toFixed(2)}%</td>
+            <td class="${dayPct >= 0 ? "gain" : "loss"}">${dayPct.toFixed(2)}%</td>
             <td class="${retRs >= 0 ? "gain" : "loss"}">₹${Math.round(retRs).toLocaleString("en-IN")}</td>
             <td style="font-weight:800; color:#6366f1;">${calculateXIRR([...f.transactions, { date: new Date(), amount: curVal }]).toFixed(2)}%</td>
         </tr>`;
@@ -125,150 +235,172 @@ function renderTable() {
     "₹" + Math.round(gCur - gInv).toLocaleString("en-IN");
 
   const dayDiff = gCur - gPrevTotal;
-  const dayPct = (dayDiff / gPrevTotal) * 100;
-  document.getElementById("total-day-change").className =
-    `stat-value ${dayDiff >= 0 ? "gain" : "loss"}`;
-  document.getElementById("total-day-change").innerText =
-    `₹${Math.round(dayDiff).toLocaleString("en-IN")} (${dayPct.toFixed(2)}%)`;
+  const dayTotalPct = gPrevTotal !== 0 ? (dayDiff / gPrevTotal) * 100 : 0;
+  const dayEl = document.getElementById("total-day-change");
+  dayEl.className = `stat-value ${dayDiff >= 0 ? "gain" : "loss"}`;
+  dayEl.innerText = `₹${Math.round(dayDiff).toLocaleString("en-IN")} (${dayTotalPct.toFixed(2)}%)`;
+
+  const periods = [
+    { k: "1w", d: 7 },
+    { k: "1m", d: 30 },
+    { k: "3m", d: 90 },
+    { k: "6m", d: 180 },
+    { k: "1y", d: 365 },
+    { k: "3y", d: 1095 },
+  ];
+  periods.forEach((p) => {
+    const oldVal = getPortfolioValueAt(p.d);
+    const amt = gCur - oldVal;
+    const pct = oldVal > 0 ? (amt / oldVal) * 100 : 0;
+    const amtEl = document.getElementById(`ret-${p.k}-amt`),
+      pctEl = document.getElementById(`ret-${p.k}-pct`);
+    if (amtEl) {
+      const cls = amt >= 0 ? "gain" : "loss";
+      amtEl.innerText =
+        (amt >= 0 ? "+" : "-") +
+        "₹" +
+        Math.round(Math.abs(amt)).toLocaleString("en-IN");
+      amtEl.className = cls;
+      pctEl.innerText = (amt >= 0 ? "+" : "") + pct.toFixed(1) + "%";
+      pctEl.className = cls;
+    }
+  });
 
   document.getElementById("total-xirr").innerText =
     calculateXIRR([...gFlows, { date: new Date(), amount: gCur }]).toFixed(2) +
     "%";
-
-  renderTotalHistoryChart("all");
+  renderTotalHistoryChart();
 }
 
-function renderTotalHistoryChart(days) {
-  const canvas = document.getElementById("totalHistoryChart");
-  const ctx = canvas.getContext("2d");
+function updateTotalTime(days, btn) {
+  currentTotalDays = days;
+  document
+    .querySelectorAll("#total-filters .filter-btn")
+    .forEach((b) => b.classList.remove("active"));
+  btn.classList.add("active");
+  renderTotalHistoryChart();
+}
 
-  const btns = document.querySelectorAll("#total-history-section .filter-btn");
-  btns.forEach((b) => {
-    b.classList.remove("active");
-    if (
-      (days === "all" && b.innerText === "ALL") ||
-      (days === 90 && b.innerText === "3M") ||
-      (days === 180 && b.innerText === "6M") ||
-      (days === 365 && b.innerText === "1Y")
-    )
-      b.classList.add("active");
-  });
-
-  let allTransactions = globalData.flatMap((f) => f.transactions);
-  let startDate = new Date(Math.min(...allTransactions.map((t) => t.date)));
-  if (days !== "all") {
-    const filterDate = new Date();
-    filterDate.setDate(filterDate.getDate() - days);
-    if (filterDate > startDate) startDate = filterDate;
+function renderTotalHistoryChart() {
+  const mode = document.getElementById("total-display-mode").value;
+  let allTx = globalData.flatMap((f) => f.transactions);
+  if (allTx.length === 0) return;
+  let start = new Date(Math.min(...allTx.map((t) => t.date)));
+  if (currentTotalDays !== "all") {
+    const fDate = new Date();
+    fDate.setDate(fDate.getDate() - currentTotalDays);
+    if (fDate > start) start = fDate;
   }
 
-  let masterTimeline = new Map();
-  globalData.forEach((fund) => {
-    fund.navHistory.forEach((entry) => {
-      const [d, m, y] = entry.date.split("-");
-      const dateObj = new Date(y, m - 1, d);
-      if (dateObj >= startDate) {
-        const dateKey = dateObj.toDateString();
-        if (!masterTimeline.has(dateKey))
-          masterTimeline.set(dateKey, {
-            date: dateObj,
-            invested: 0,
-            current: 0,
-          });
-      }
-    });
-  });
-
-  const sortedDates = Array.from(masterTimeline.values()).sort(
-    (a, b) => a.date - b.date,
+  let master = new Map();
+  globalData.forEach((f) =>
+    f.navHistory.forEach((e) => {
+      const [d, m, y] = e.date.split("-");
+      const dObj = new Date(y, m - 1, d);
+      if (dObj >= start)
+        master.set(dObj.toDateString(), { date: dObj, inv: 0, cur: 0 });
+    }),
   );
-  sortedDates.forEach((point) => {
+
+  const sorted = Array.from(master.values()).sort((a, b) => a.date - b.date);
+  sorted.forEach((p) => {
     globalData.forEach((fund) => {
-      let runningUnits = 0,
-        runningInv = 0;
+      let rU = 0,
+        rI = 0;
       fund.transactions.forEach((tx) => {
-        if (tx.date <= point.date) {
-          runningUnits += tx.units;
-          if (tx.units > 0) runningInv += Math.abs(tx.amount);
-          else
-            runningInv -=
-              (runningInv / (runningUnits - tx.units || 1)) *
-              Math.abs(tx.units);
+        if (tx.date <= p.date) {
+          if (tx.units > 0) {
+            rI += Math.abs(tx.amount);
+            rU += tx.units;
+          } else {
+            const avg = rU > 0 ? rI / rU : 0;
+            rI -= avg * Math.abs(tx.units);
+            rU += tx.units;
+          }
         }
       });
-      const dateStr = point.date
-        .toLocaleDateString("en-GB")
-        .replace(/\//g, "-");
-      const navEntry = fund.navHistory.find((n) => n.date === dateStr);
-      const nav = navEntry
-        ? parseFloat(navEntry.nav)
-        : parseFloat(fund.navHistory[0].nav);
-      point.invested += runningInv;
-      point.current += runningUnits * nav;
+      const dStr = p.date.toLocaleDateString("en-GB").replace(/\//g, "-");
+      const navE = fund.navHistory.find((n) => n.date === dStr);
+      const nav = navE
+        ? parseFloat(navE.nav)
+        : fund.navHistory.length > 0
+          ? parseFloat(fund.navHistory[0].nav)
+          : 0;
+      p.inv += rI;
+      p.cur += rU * nav;
     });
   });
 
   if (totalHistoryChartInstance) totalHistoryChartInstance.destroy();
-  totalHistoryChartInstance = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: sortedDates.map((p) =>
-        p.date.toLocaleDateString("en-IN", { month: "short", year: "2-digit" }),
-      ),
-      datasets: [
-        {
-          label: "Value",
-          data: sortedDates.map((p) => Math.round(p.current)),
-          borderColor: "#6366f1",
-          borderWidth: 3,
-          tension: 0.4,
-          pointRadius: 0,
-          fill: true,
-          backgroundColor: "rgba(99, 102, 241, 0.05)",
-        },
-        {
-          label: "Invested",
-          data: sortedDates.map((p) => Math.round(p.invested)),
-          borderColor: "#94a3b8",
-          borderWidth: 2,
-          tension: 0,
-          pointRadius: 0,
-          fill: false,
-        },
-      ],
+  const ds = [
+    {
+      label: "Value",
+      data: sorted.map((p) => Math.round(p.cur)),
+      borderColor: CHART_CONFIG.valueColor,
+      borderWidth: CHART_CONFIG.borderWidth,
+      tension: CHART_CONFIG.tension,
+      pointRadius: CHART_CONFIG.pointRadius,
+      fill: CHART_CONFIG.fill,
+      backgroundColor: CHART_CONFIG.valueBg,
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        tooltip: { enabled: true, backgroundColor: "rgba(15, 23, 42, 0.9)" },
-        legend: { display: false },
+  ];
+  if (mode === "both")
+    ds.push({
+      label: "Cost",
+      data: sorted.map((p) => Math.round(p.inv)),
+      borderColor: CHART_CONFIG.costColor,
+      borderWidth: CHART_CONFIG.costWidth,
+      tension: 0,
+      pointRadius: 0,
+      fill: false,
+    });
+
+  totalHistoryChartInstance = new Chart(
+    document.getElementById("totalHistoryChart").getContext("2d"),
+    {
+      type: "line",
+      data: {
+        labels: sorted.map((p) =>
+          p.date.toLocaleDateString("en-IN", {
+            month: "short",
+            year: "2-digit",
+          }),
+        ),
+        datasets: ds,
       },
-      scales: {
-        x: { grid: { display: false } },
-        y: { grid: { color: "rgba(0,0,0,0.03)" } },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
       },
     },
-  });
+  );
 }
 
-function showHistoryChart(schemeCode, days) {
-  const fund = globalData.find((f) => f.code === schemeCode);
+function showHistoryChart(code, days = "all") {
+  currentFundDays = days;
+  const fund = globalData.find((f) => f.code === code);
   if (!fund) return;
   document.getElementById("history-section").style.display = "block";
   document.getElementById("history-fund-name").innerText = fund.name;
-  document.getElementById("fund-filters").innerHTML = `
-        <button class="filter-btn ${days == 90 ? "active" : ""}" onclick="showHistoryChart('${schemeCode}', 90)">3M</button>
-        <button class="filter-btn ${days == 180 ? "active" : ""}" onclick="showHistoryChart('${schemeCode}', 180)">6M</button>
-        <button class="filter-btn ${days == 365 ? "active" : ""}" onclick="showHistoryChart('${schemeCode}', 365)">1Y</button>
-        <button class="filter-btn ${days == "all" ? "active" : ""}" onclick="showHistoryChart('${schemeCode}', 'all')">ALL</button>`;
+  const mode = document.getElementById("fund-display-mode");
+  mode.onchange = () => showHistoryChart(code, currentFundDays);
 
-  let startDate = new Date(Math.min(...fund.transactions.map((t) => t.date)));
+  const filterArr = [7, 30, 90, 180, 365, 1095, "all"],
+    lbls = ["1W", "1M", "3M", "6M", "1Y", "3Y", "ALL"];
+  document.getElementById("fund-filters").innerHTML = filterArr
+    .map(
+      (f, i) =>
+        `<button class="filter-btn ${currentFundDays === f ? "active" : ""}" onclick="showHistoryChart('${code}', ${typeof f === "string" ? "'all'" : f})">${lbls[i]}</button>`,
+    )
+    .join("");
+
+  let firstTxDate = new Date(Math.min(...fund.transactions.map((t) => t.date)));
+  let chartStart = firstTxDate;
   if (days !== "all") {
-    const filterDate = new Date();
+    let filterDate = new Date();
     filterDate.setDate(filterDate.getDate() - days);
-    if (filterDate > startDate) startDate = filterDate;
+    chartStart = filterDate > firstTxDate ? filterDate : firstTxDate;
   }
 
   const timeline = fund.navHistory
@@ -276,87 +408,89 @@ function showHistoryChart(schemeCode, days) {
       const [day, month, year] = d.date.split("-");
       return { date: new Date(year, month - 1, day), nav: parseFloat(d.nav) };
     })
-    .filter((d) => d.date >= startDate)
-    .reverse();
+    .filter((d) => d.date >= chartStart)
+    .sort((a, b) => a.date - b.date);
 
   let labels = [],
-    invData = [],
-    curData = [],
-    rUnits = 0,
-    rInv = 0;
+    costData = [],
+    valueData = [];
   timeline.forEach((tp) => {
+    let rU = 0,
+      rI = 0;
     fund.transactions.forEach((tx) => {
-      if (tx.date.toDateString() === tp.date.toDateString()) {
-        rUnits += tx.units;
-        rInv +=
-          tx.units > 0
-            ? Math.abs(tx.amount)
-            : -((rInv / (rUnits - tx.units)) * Math.abs(tx.units));
+      if (tx.date <= tp.date) {
+        if (tx.units > 0) {
+          rI += Math.abs(tx.amount);
+          rU += tx.units;
+        } else {
+          const avg = rU > 0 ? rI / rU : 0;
+          rI -= avg * Math.abs(tx.units);
+          rU += tx.units;
+        }
       }
     });
     labels.push(
       tp.date.toLocaleDateString("en-IN", { month: "short", year: "2-digit" }),
     );
-    invData.push(Math.round(rInv));
-    curData.push(Math.round(rUnits * tp.nav));
+    costData.push(Math.round(rI));
+    valueData.push(Math.round(rU * tp.nav));
   });
 
   if (historyChartInstance) historyChartInstance.destroy();
+  const ds = [
+    {
+      label: "Value",
+      data: valueData,
+      borderColor: CHART_CONFIG.valueColor,
+      borderWidth: CHART_CONFIG.borderWidth,
+      tension: CHART_CONFIG.tension,
+      fill: CHART_CONFIG.fill,
+      backgroundColor: CHART_CONFIG.valueBg,
+      pointRadius: CHART_CONFIG.pointRadius,
+    },
+  ];
+  if (mode.value === "both")
+    ds.push({
+      label: "Cost",
+      data: costData,
+      borderColor: CHART_CONFIG.costColor,
+      borderWidth: CHART_CONFIG.costWidth,
+      fill: false,
+      tension: 0,
+      pointRadius: 0,
+    });
+
   historyChartInstance = new Chart(
     document.getElementById("historyChart").getContext("2d"),
     {
       type: "line",
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: "Value",
-            data: curData,
-            borderColor: "#6366f1",
-            borderWidth: 3,
-            tension: 0.4,
-            fill: true,
-            backgroundColor: "rgba(99, 102, 241, 0.1)",
-            pointRadius: 0,
-          },
-          {
-            label: "Invested",
-            data: invData,
-            borderColor: "#94a3b8",
-            borderWidth: 2,
-            fill: false,
-            tension: 0,
-            pointRadius: 0,
-          },
-        ],
-      },
+      data: { labels, datasets: ds },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
-        plugins: { tooltip: { enabled: true }, legend: { display: false } },
       },
     },
   );
 }
 
-function calculateXIRR(cashFlows) {
-  if (cashFlows.length < 2) return 0;
-  let xirr = 0.1;
+function calculateXIRR(cf) {
+  if (cf.length < 2) return 0;
+  let x = 0.1;
   for (let i = 0; i < 100; i++) {
     let npv = 0,
       dNpv = 0;
-    for (const cf of cashFlows) {
-      const t = (cf.date - cashFlows[0].date) / (1000 * 60 * 60 * 24 * 365.25);
-      const step = Math.pow(1 + xirr, t);
-      npv += cf.amount / step;
-      dNpv -= (t * cf.amount) / Math.pow(1 + xirr, t + 1);
+    for (const c of cf) {
+      const t = (c.date - cf[0].date) / 31557600000;
+      const s = Math.pow(1 + x, t);
+      npv += c.amount / s;
+      dNpv -= (t * c.amount) / Math.pow(1 + x, t + 1);
     }
-    const newXirr = xirr - npv / dNpv;
-    if (Math.abs(newXirr - xirr) < 0.000001) return newXirr * 100;
-    xirr = newXirr;
+    const nx = x - npv / dNpv;
+    if (Math.abs(nx - x) < 0.000001) return nx * 100;
+    x = nx;
   }
-  return xirr * 100;
+  return x * 100;
 }
 
 init();
