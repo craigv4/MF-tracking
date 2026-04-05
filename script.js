@@ -1,15 +1,24 @@
+// ─────────────────────────────────────────────
+//  CONFIG
+// ─────────────────────────────────────────────
 const SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vQqGiMZpcrNGa6vTUxck82cFgTbC3FSTMlQm69T5buwWl_znhJg_PozTOOO2oof3xGV55JVj-AEEvf1/pub?gid=0&single=true&output=csv";
 const SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbzCMQ8n2nXcF7x8Rm-7g6isvcXAFc0RrrRpae6-ZNlKXgWwW7Ihn9tlgv8d9w4AZwvslg/exec";
 
+// ─────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────
 let globalData = [];
 let totalHistoryChartInstance = null;
 let historyChartInstance = null;
+let allocationChartInstance = null;
 let currentTotalDays = "all";
 let currentFundDays = "all";
+let sortCol = null;
+let sortDir = 1; // 1 = asc, -1 = desc
+let searchQuery = "";
 
-// Centralized style config for absolute consistency
 const CHART_CONFIG = {
   tension: 0.4,
   borderWidth: 3,
@@ -21,6 +30,9 @@ const CHART_CONFIG = {
   costWidth: 2,
 };
 
+// ─────────────────────────────────────────────
+//  THEME
+// ─────────────────────────────────────────────
 function initTheme() {
   const savedTheme = localStorage.getItem("theme") || "light";
   document.documentElement.setAttribute("data-theme", savedTheme);
@@ -35,37 +47,142 @@ function toggleTheme() {
   localStorage.setItem("theme", target);
   document.getElementById("theme-icon").innerText =
     target === "dark" ? "☀️" : "🌙";
+  // Re-render charts to match new theme
+  if (globalData.length) {
+    renderTotalHistoryChart();
+    renderAllocationChart();
+  }
 }
 
+// ─────────────────────────────────────────────
+//  TOAST NOTIFICATIONS (replaces alert())
+// ─────────────────────────────────────────────
+function showToast(message, type = "info") {
+  const existing = document.getElementById("toast-container");
+  if (!existing) {
+    const div = document.createElement("div");
+    div.id = "toast-container";
+    document.body.appendChild(div);
+  }
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  const icons = { success: "✅", error: "❌", info: "ℹ️", warning: "⚠️" };
+  toast.innerHTML = `<span>${icons[type] || "ℹ️"}</span><span>${message}</span>`;
+  document.getElementById("toast-container").appendChild(toast);
+  setTimeout(() => toast.classList.add("show"), 10);
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 400);
+  }, 3500);
+}
+
+// ─────────────────────────────────────────────
+//  LOADING SKELETON
+// ─────────────────────────────────────────────
+function setLoading(isLoading) {
+  const btn = document.querySelector(".refresh-btn");
+  if (btn) {
+    btn.innerText = isLoading ? "Syncing…" : "Sync Portfolio";
+    btn.disabled = isLoading;
+  }
+
+  const tbody = document.getElementById("portfolio-body");
+  if (isLoading) {
+    tbody.innerHTML = Array(3)
+      .fill(
+        `<tr class="skeleton-row">
+          ${Array(7).fill('<td><div class="skeleton-cell"></div></td>').join("")}
+        </tr>`,
+      )
+      .join("");
+
+    // Zero out stats with a pulse
+    [
+      "total-invested",
+      "total-current",
+      "total-profit",
+      "total-day-change",
+      "total-xirr",
+    ].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add("skeleton-pulse");
+    });
+  } else {
+    [
+      "total-invested",
+      "total-current",
+      "total-profit",
+      "total-day-change",
+      "total-xirr",
+    ].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove("skeleton-pulse");
+    });
+  }
+}
+
+// ─────────────────────────────────────────────
+//  ROBUST CSV PARSER (handles commas in fields)
+// ─────────────────────────────────────────────
+function parseCSV(text) {
+  const rows = [];
+  const lines = text.split("\n").filter((l) => l.trim());
+  for (const line of lines) {
+    const cols = [];
+    let cur = "",
+      inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+      } else if (ch === "," && !inQuotes) {
+        cols.push(cur.trim());
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    cols.push(cur.trim());
+    rows.push(cols);
+  }
+  return rows;
+}
+
+// ─────────────────────────────────────────────
+//  FORM
+// ─────────────────────────────────────────────
 function resetForm() {
-  document.getElementById("form-id").value = "";
-  document.getElementById("form-units").value = "";
-  document.getElementById("form-price").value = "";
-  document.getElementById("form-date").value = "";
+  ["form-id", "form-units", "form-price", "form-date"].forEach(
+    (id) => (document.getElementById(id).value = ""),
+  );
   document.getElementById("add-form").classList.add("hidden");
 }
 
 async function submitData() {
   const btn = document.getElementById("submit-btn");
   const rawDate = document.getElementById("form-date").value;
-  const schemeId = document.getElementById("form-id").value;
+  const schemeId = document.getElementById("form-id").value.trim();
   const units = document.getElementById("form-units").value;
   const price = document.getElementById("form-price").value;
 
-  if (!rawDate || !schemeId || !units)
-    return alert("Please fill Date, Scheme Code, and Units.");
+  if (!rawDate || !schemeId || !units) {
+    showToast("Please fill Date, Scheme Code, and Units.", "warning");
+    return;
+  }
+
+  // Confirmation
+  if (!confirm(`Record ${units} units of scheme ${schemeId} on ${rawDate}?`))
+    return;
 
   const [year, month, day] = rawDate.split("-");
-  const formattedDate = `${day}/${month}/${year}`;
-
   const payload = {
-    date: formattedDate,
+    date: `${day}/${month}/${year}`,
     id: schemeId,
     units: parseFloat(units),
     price: price ? parseFloat(price) : 0,
   };
 
-  btn.innerText = "Syncing...";
+  btn.innerText = "Syncing…";
   btn.disabled = true;
 
   try {
@@ -75,37 +192,37 @@ async function submitData() {
       cache: "no-cache",
       body: JSON.stringify(payload),
     });
-    alert("Transaction recorded!");
+    showToast("Transaction recorded successfully!", "success");
     resetForm();
-    setTimeout(() => {
-      init();
-    }, 2000);
+    setTimeout(() => init(), 2000);
   } catch (err) {
-    alert("Connection error.");
+    showToast("Connection error. Please try again.", "error");
   } finally {
     btn.innerText = "Submit to Sheet";
     btn.disabled = false;
   }
 }
 
+// ─────────────────────────────────────────────
+//  MAIN INIT  (parallel fetching via Promise.all)
+// ─────────────────────────────────────────────
 async function init() {
-  initTheme();
+  setLoading(true);
   try {
     const response = await fetch(`${SHEET_CSV_URL}&cb=${Date.now()}`);
     const csvText = await response.text();
-    const rows = csvText
-      .split("\n")
-      .filter((r) => r.trim() !== "")
-      .slice(1);
-    let localTotals = {};
+    const allRows = parseCSV(csvText).slice(1); // skip header
 
-    rows.forEach((row) => {
-      const cols = row.split(",").map((c) => c.trim());
+    let localTotals = {};
+    allRows.forEach((cols) => {
       const [dateStr, id, unitsStr, priceStr, stampStr, nameStr] = cols;
       if (!id || isNaN(parseFloat(unitsStr))) return;
-
       if (!localTotals[id])
-        localTotals[id] = { units: 0, transactions: [], fallbackName: nameStr };
+        localTotals[id] = {
+          units: 0,
+          transactions: [],
+          fallbackName: nameStr || id,
+        };
       const units = parseFloat(unitsStr),
         price = parseFloat(priceStr) || 0;
       localTotals[id].transactions.push({
@@ -117,11 +234,28 @@ async function init() {
       });
     });
 
+    const ids = Object.keys(localTotals);
+    if (ids.length === 0) {
+      showToast("No fund data found in sheet.", "warning");
+      setLoading(false);
+      return;
+    }
+
+    // ✅ Parallel fetch — all funds at once
+    const apiResults = await Promise.all(
+      ids.map((id) =>
+        fetch(`https://api.mfapi.in/mf/${id}`)
+          .then((r) => r.json())
+          .catch(() => null),
+      ),
+    );
+
     let portfolioArray = [];
-    for (const id in localTotals) {
-      const res = await fetch(`https://api.mfapi.in/mf/${id}`);
-      const json = await res.json();
-      const currentNav = json.data ? parseFloat(json.data[0].nav) : 0;
+    ids.forEach((id, idx) => {
+      const json = apiResults[idx];
+      if (!json) return;
+
+      const currentNav = json.data ? parseFloat(json.data[0]?.nav) : 0;
       const prevNav =
         json.data && json.data[1] ? parseFloat(json.data[1].nav) : currentNav;
 
@@ -129,11 +263,14 @@ async function init() {
         rUnits = 0,
         txs = [],
         tStamp = 0;
+
       localTotals[id].transactions
         .sort((a, b) => {
-          const [d1, m1, y1] = a.dateStr.split(/[-/]/);
-          const [d2, m2, y2] = b.dateStr.split(/[-/]/);
-          return new Date(y1, m1 - 1, d1) - new Date(y2, m2 - 1, d2);
+          const toDate = (s) => {
+            const [d, m, y] = s.split(/[-/]/);
+            return new Date(y, m - 1, d);
+          };
+          return toDate(a.dateStr) - toDate(b.dateStr);
         })
         .forEach((tx) => {
           const [d, m, y] = tx.dateStr.split(/[-/]/);
@@ -151,7 +288,7 @@ async function init() {
         });
 
       portfolioArray.push({
-        name: json.meta ? json.meta.scheme_name : localTotals[id].fallbackName,
+        name: json.meta?.scheme_name || localTotals[id].fallbackName,
         code: id,
         units: rUnits,
         invested: netInv,
@@ -161,31 +298,341 @@ async function init() {
         transactions: txs,
         navHistory: json.data || [],
       });
-    }
+    });
+
     globalData = portfolioArray;
     renderTable();
+    renderAllocationChart();
+    showToast("Portfolio synced!", "success");
   } catch (err) {
     console.error(err);
+    showToast("Failed to load portfolio. Check your connection.", "error");
+  } finally {
+    setLoading(false);
   }
 }
 
+// ─────────────────────────────────────────────
+//  SEARCH & SORT HELPERS
+// ─────────────────────────────────────────────
+function onSearch(val) {
+  searchQuery = val.toLowerCase();
+  renderTable();
+}
+
+function onSort(col) {
+  if (sortCol === col) {
+    sortDir *= -1;
+  } else {
+    sortCol = col;
+    sortDir = 1;
+  }
+  renderTable();
+}
+
+function getSortedFiltered(data) {
+  let filtered = data.filter(
+    (f) =>
+      !searchQuery ||
+      f.name.toLowerCase().includes(searchQuery) ||
+      f.code.includes(searchQuery),
+  );
+
+  if (!sortCol) return filtered;
+
+  return filtered.sort((a, b) => {
+    let va, vb;
+    switch (sortCol) {
+      case "name":
+        va = a.name;
+        vb = b.name;
+        return sortDir * va.localeCompare(vb);
+      case "units":
+        va = a.units;
+        vb = b.units;
+        break;
+      case "invested":
+        va = a.invested;
+        vb = b.invested;
+        break;
+      case "value":
+        va = a.currentNav * a.units;
+        vb = b.currentNav * b.units;
+        break;
+      case "dayChange":
+        va =
+          a.prevNav !== 0 ? ((a.currentNav - a.prevNav) / a.prevNav) * 100 : 0;
+        vb =
+          b.prevNav !== 0 ? ((b.currentNav - b.prevNav) / b.prevNav) * 100 : 0;
+        break;
+      case "returns":
+        va = a.currentNav * a.units - a.invested;
+        vb = b.currentNav * b.units - b.invested;
+        break;
+      case "xirr":
+        va = safeXIRR([
+          ...a.transactions,
+          { date: new Date(), amount: a.currentNav * a.units },
+        ]);
+        vb = safeXIRR([
+          ...b.transactions,
+          { date: new Date(), amount: b.currentNav * b.units },
+        ]);
+        break;
+      default:
+        return 0;
+    }
+    return sortDir * (va - vb);
+  });
+}
+
+function sortIcon(col) {
+  if (sortCol !== col) return `<span class="sort-icon">⇅</span>`;
+  return sortDir === 1
+    ? `<span class="sort-icon active">↑</span>`
+    : `<span class="sort-icon active">↓</span>`;
+}
+
+// ─────────────────────────────────────────────
+//  RENDER TABLE
+// ─────────────────────────────────────────────
+function renderTable() {
+  const tbody = document.getElementById("portfolio-body");
+  let gInv = 0,
+    gCur = 0,
+    gPrevTotal = 0,
+    gFlows = [];
+
+  const displayData = getSortedFiltered(globalData);
+
+  const html = displayData
+    .map((f) => {
+      const curVal = f.currentNav * f.units;
+      const prevVal = f.prevNav * f.units;
+      const retRs = curVal - f.invested;
+      const retPct = f.invested > 0 ? (retRs / f.invested) * 100 : 0;
+      const dayPct =
+        f.prevNav !== 0 ? ((f.currentNav - f.prevNav) / f.prevNav) * 100 : 0;
+      gInv += f.invested;
+      gCur += curVal;
+      gPrevTotal += prevVal;
+      gFlows.push(...f.transactions);
+
+      const xirr = safeXIRR([
+        ...f.transactions,
+        { date: new Date(), amount: curVal },
+      ]);
+
+      return `<tr onclick="showHistoryChart('${f.code}', 'all')" title="Click to view fund history">
+        <td><strong>${f.name}</strong><br><span class="code-badge">${f.code}</span></td>
+        <td>${f.units.toFixed(3)}</td>
+        <td>₹${Math.round(f.invested).toLocaleString("en-IN")}</td>
+        <td>₹${Math.round(curVal).toLocaleString("en-IN")}</td>
+        <td class="${dayPct >= 0 ? "gain" : "loss"}">${dayPct >= 0 ? "+" : ""}${dayPct.toFixed(2)}%</td>
+        <td class="${retRs >= 0 ? "gain" : "loss"}">
+          ₹${Math.round(retRs).toLocaleString("en-IN")}
+          <small style="display:block;opacity:0.7">${retPct >= 0 ? "+" : ""}${retPct.toFixed(1)}%</small>
+        </td>
+        <td style="font-weight:800; color:#6366f1;">${xirr.toFixed(2)}%</td>
+      </tr>`;
+    })
+    .join("");
+
+  tbody.innerHTML =
+    html ||
+    `<tr><td colspan="7" style="text-align:center;padding:30px;opacity:0.5;">No funds match your search.</td></tr>`;
+
+  // ── Summary stats (always from full globalData, not filtered) ──
+  globalData.forEach((f) => {
+    // already accumulated above if not filtered — recalc from full set
+  });
+
+  // Recalculate from full globalData for summary
+  let tInv = 0,
+    tCur = 0,
+    tPrev = 0,
+    tFlows = [];
+  globalData.forEach((f) => {
+    tInv += f.invested;
+    tCur += f.currentNav * f.units;
+    tPrev += f.prevNav * f.units;
+    tFlows.push(...f.transactions);
+  });
+
+  document.getElementById("total-invested").innerText =
+    "₹" + Math.round(tInv).toLocaleString("en-IN");
+  document.getElementById("total-current").innerText =
+    "₹" + Math.round(tCur).toLocaleString("en-IN");
+
+  const totalProfit = tCur - tInv;
+  const profitEl = document.getElementById("total-profit");
+  profitEl.className = `stat-value ${totalProfit >= 0 ? "gain" : "loss"}`;
+  profitEl.innerText =
+    (totalProfit >= 0 ? "+" : "") +
+    "₹" +
+    Math.round(totalProfit).toLocaleString("en-IN");
+
+  const dayDiff = tCur - tPrev;
+  const dayTotalPct = tPrev !== 0 ? (dayDiff / tPrev) * 100 : 0;
+  const dayEl = document.getElementById("total-day-change");
+  dayEl.className = `stat-value ${dayDiff >= 0 ? "gain" : "loss"}`;
+  dayEl.innerText = `${dayDiff >= 0 ? "+" : ""}₹${Math.round(dayDiff).toLocaleString("en-IN")} (${dayTotalPct.toFixed(2)}%)`;
+
+  // ── Performance History: Hybrid Absolute (≤3M) + XIRR (≥6M) ───────────────
+  //
+  //  For every period:
+  //    Gain ₹  = Ending Value − Opening Value − Fresh Buys in window + Redemptions
+  //              → pure wealth added by the market, fresh SIPs stripped out
+  //    % short = Gain ÷ Opening Value  (Absolute — XIRR is noisy over days/weeks)
+  //    % long  = Rolling XIRR on [opening as outflow + in-period txs + current value]
+  //              → annualised, accounts for exact SIP timing, same as Kuvera/Groww
+  //
+  //  Also computes:
+  //    • Best performing period  → highlighted with accent border
+  //    • Since-inception summary → total gain ₹ + overall XIRR + days invested
+
+  const periods = [
+    { k: "1w", d: 7, useXIRR: false },
+    { k: "1m", d: 30, useXIRR: false },
+    { k: "3m", d: 90, useXIRR: false },
+    { k: "6m", d: 180, useXIRR: true },
+    { k: "1y", d: 365, useXIRR: true },
+    { k: "3y", d: 1095, useXIRR: true },
+  ];
+
+  // Collect computed values so we can find the best performer
+  const periodResults = [];
+
+  periods.forEach((p) => {
+    const periodStart = new Date();
+    periodStart.setDate(periodStart.getDate() - p.d);
+
+    const openingVal = getPortfolioValueAt(p.d);
+
+    if (openingVal <= 0) {
+      periodResults.push({ k: p.k, gainAmt: null, pct: null });
+      return;
+    }
+
+    // Fresh buys within this window (negative amount = outflow/buy)
+    const freshCapital = tFlows
+      .filter((tx) => tx.date > periodStart && tx.amount < 0)
+      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+
+    // Redemptions within this window (positive amount = inflow/sell)
+    const redemptions = tFlows
+      .filter((tx) => tx.date > periodStart && tx.amount > 0)
+      .reduce((sum, tx) => sum + tx.amount, 0);
+
+    // Pure market gain — fresh capital stripped out
+    const gainAmt = tCur - openingVal - freshCapital + redemptions;
+
+    let pct, pctLabel;
+    if (p.useXIRR) {
+      // Build mini cash-flow: opening as buy → in-period txs → current value
+      const flows = [
+        { date: periodStart, amount: -openingVal },
+        ...tFlows.filter((tx) => tx.date > periodStart),
+        { date: new Date(), amount: tCur },
+      ];
+      pct = safeXIRR(flows);
+      pctLabel = "p.a.";
+    } else {
+      pct = openingVal > 0 ? (gainAmt / openingVal) * 100 : 0;
+      pctLabel = "abs";
+    }
+
+    periodResults.push({ k: p.k, gainAmt, pct, pctLabel, useXIRR: p.useXIRR });
+  });
+
+  // Find best period (highest % among valid periods)
+  const validPcts = periodResults.filter((r) => r.pct !== null);
+  const bestPeriod = validPcts.length
+    ? validPcts.reduce((best, r) => (r.pct > best.pct ? r : best), validPcts[0])
+    : null;
+
+  // Render each period cell
+  periodResults.forEach((r) => {
+    const amtEl = document.getElementById(`ret-${r.k}-amt`);
+    const pctEl = document.getElementById(`ret-${r.k}-pct`);
+    const cell = document.getElementById(`ret-cell-${r.k}`);
+    if (!amtEl) return;
+
+    if (r.gainAmt === null) {
+      amtEl.innerText = "N/A";
+      amtEl.className = "";
+      pctEl.innerText = "—";
+      pctEl.className = "";
+      if (cell) cell.classList.remove("best-period");
+      return;
+    }
+
+    const cls = r.gainAmt >= 0 ? "gain" : "loss";
+    amtEl.className = cls;
+    pctEl.className = cls;
+    amtEl.innerText =
+      (r.gainAmt >= 0 ? "+" : "-") +
+      "₹" +
+      Math.round(Math.abs(r.gainAmt)).toLocaleString("en-IN");
+    pctEl.innerHTML = `${r.pct >= 0 ? "+" : ""}${r.pct.toFixed(2)}% <em>${r.pctLabel}</em>`;
+
+    // Highlight best performer
+    if (cell) {
+      cell.classList.toggle(
+        "best-period",
+        bestPeriod && r.k === bestPeriod.k && r.gainAmt > 0,
+      );
+    }
+  });
+
+  // ── Since Inception ──────────────────────────────────────────────────────
+  const inceptionDate = tFlows.length
+    ? new Date(Math.min(...tFlows.map((t) => t.date)))
+    : null;
+
+  const inceptionGain = tCur - tInv;
+  const inceptionXIRR = safeXIRR([
+    ...tFlows,
+    { date: new Date(), amount: tCur },
+  ]);
+  const daysSince = inceptionDate
+    ? Math.floor((new Date() - inceptionDate) / 86400000)
+    : 0;
+
+  const inceptionEl = document.getElementById("ret-inception");
+  if (inceptionEl && inceptionDate) {
+    const gainCls = inceptionGain >= 0 ? "gain" : "loss";
+    inceptionEl.innerHTML = `
+      <span class="inception-label">Since ${inceptionDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} · ${daysSince} days</span>
+      <span class="${gainCls} inception-gain">
+        ${inceptionGain >= 0 ? "+" : "-"}₹${Math.round(Math.abs(inceptionGain)).toLocaleString("en-IN")}
+      </span>
+      <span class="${gainCls} inception-xirr">${inceptionXIRR >= 0 ? "+" : ""}${inceptionXIRR.toFixed(2)}% XIRR p.a.</span>
+    `;
+  }
+
+  const xirrVal = safeXIRR([...tFlows, { date: new Date(), amount: tCur }]);
+  document.getElementById("total-xirr").innerText = xirrVal.toFixed(2) + "%";
+  renderTotalHistoryChart();
+}
+
+// ─────────────────────────────────────────────
+//  PORTFOLIO VALUE AT A POINT IN TIME
+// ─────────────────────────────────────────────
 function getPortfolioValueAt(daysAgo) {
   const targetDate = new Date();
   targetDate.setDate(targetDate.getDate() - daysAgo);
   let totalVal = 0;
-
   globalData.forEach((fund) => {
     let unitsAtTime = 0;
     fund.transactions.forEach((tx) => {
       if (tx.date <= targetDate) unitsAtTime += tx.units;
     });
     if (unitsAtTime <= 0) return;
-
     const histEntry = fund.navHistory.find((h) => {
       const [d, m, y] = h.date.split("-");
       return new Date(y, m - 1, d) <= targetDate;
     });
-
     const nav = histEntry
       ? parseFloat(histEntry.nav)
       : fund.navHistory.length > 0
@@ -196,82 +643,9 @@ function getPortfolioValueAt(daysAgo) {
   return totalVal;
 }
 
-function renderTable() {
-  const tbody = document.getElementById("portfolio-body");
-  let html = "",
-    gInv = 0,
-    gCur = 0,
-    gPrevTotal = 0,
-    gFlows = [];
-
-  globalData.forEach((f) => {
-    const curVal = f.currentNav * f.units;
-    const prevVal = f.prevNav * f.units;
-    const retRs = curVal - f.invested;
-    const dayPct =
-      f.prevNav !== 0 ? ((f.currentNav - f.prevNav) / f.prevNav) * 100 : 0;
-    gInv += f.invested;
-    gCur += curVal;
-    gPrevTotal += prevVal;
-    gFlows.push(...f.transactions);
-
-    html += `<tr onclick="showHistoryChart('${f.code}', 'all')">
-            <td><strong>${f.name}</strong><br><span class="code-badge">${f.code}</span></td>
-            <td>${f.units.toFixed(3)}</td>
-            <td>₹${Math.round(f.invested).toLocaleString("en-IN")}</td>
-            <td>₹${Math.round(curVal).toLocaleString("en-IN")}</td>
-            <td class="${dayPct >= 0 ? "gain" : "loss"}">${dayPct.toFixed(2)}%</td>
-            <td class="${retRs >= 0 ? "gain" : "loss"}">₹${Math.round(retRs).toLocaleString("en-IN")}</td>
-            <td style="font-weight:800; color:#6366f1;">${calculateXIRR([...f.transactions, { date: new Date(), amount: curVal }]).toFixed(2)}%</td>
-        </tr>`;
-  });
-
-  tbody.innerHTML = html;
-  document.getElementById("total-invested").innerText =
-    "₹" + Math.round(gInv).toLocaleString("en-IN");
-  document.getElementById("total-current").innerText =
-    "₹" + Math.round(gCur).toLocaleString("en-IN");
-  document.getElementById("total-profit").innerText =
-    "₹" + Math.round(gCur - gInv).toLocaleString("en-IN");
-
-  const dayDiff = gCur - gPrevTotal;
-  const dayTotalPct = gPrevTotal !== 0 ? (dayDiff / gPrevTotal) * 100 : 0;
-  const dayEl = document.getElementById("total-day-change");
-  dayEl.className = `stat-value ${dayDiff >= 0 ? "gain" : "loss"}`;
-  dayEl.innerText = `₹${Math.round(dayDiff).toLocaleString("en-IN")} (${dayTotalPct.toFixed(2)}%)`;
-
-  const periods = [
-    { k: "1w", d: 7 },
-    { k: "1m", d: 30 },
-    { k: "3m", d: 90 },
-    { k: "6m", d: 180 },
-    { k: "1y", d: 365 },
-    { k: "3y", d: 1095 },
-  ];
-  periods.forEach((p) => {
-    const oldVal = getPortfolioValueAt(p.d);
-    const amt = gCur - oldVal;
-    const pct = oldVal > 0 ? (amt / oldVal) * 100 : 0;
-    const amtEl = document.getElementById(`ret-${p.k}-amt`),
-      pctEl = document.getElementById(`ret-${p.k}-pct`);
-    if (amtEl) {
-      const cls = amt >= 0 ? "gain" : "loss";
-      amtEl.innerText =
-        (amt >= 0 ? "+" : "-") +
-        "₹" +
-        Math.round(Math.abs(amt)).toLocaleString("en-IN");
-      amtEl.className = cls;
-      pctEl.innerText = (amt >= 0 ? "+" : "") + pct.toFixed(1) + "%";
-      pctEl.className = cls;
-    }
-  });
-
-  document.getElementById("total-xirr").innerText =
-    calculateXIRR([...gFlows, { date: new Date(), amount: gCur }]).toFixed(2) +
-    "%";
-  renderTotalHistoryChart();
-}
-
+// ─────────────────────────────────────────────
+//  TOTAL HISTORY CHART
+// ─────────────────────────────────────────────
 function updateTotalTime(days, btn) {
   currentTotalDays = days;
   document
@@ -285,6 +659,7 @@ function renderTotalHistoryChart() {
   const mode = document.getElementById("total-display-mode").value;
   let allTx = globalData.flatMap((f) => f.transactions);
   if (allTx.length === 0) return;
+
   let start = new Date(Math.min(...allTx.map((t) => t.date)));
   if (currentTotalDays !== "all") {
     const fDate = new Date();
@@ -332,6 +707,11 @@ function renderTotalHistoryChart() {
   });
 
   if (totalHistoryChartInstance) totalHistoryChartInstance.destroy();
+
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  const gridColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
+  const tickColor = isDark ? "#94a3b8" : "#64748b";
+
   const ds = [
     {
       label: "Value",
@@ -372,22 +752,120 @@ function renderTotalHistoryChart() {
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { labels: { color: tickColor, font: { weight: "700" } } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ` ₹${ctx.parsed.y.toLocaleString("en-IN")}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { color: gridColor },
+            ticks: { color: tickColor, maxTicksLimit: 8 },
+          },
+          y: {
+            grid: { color: gridColor },
+            ticks: {
+              color: tickColor,
+              callback: (v) =>
+                "₹" +
+                (v >= 100000
+                  ? (v / 100000).toFixed(1) + "L"
+                  : v.toLocaleString("en-IN")),
+            },
+          },
+        },
       },
     },
   );
 }
 
+// ─────────────────────────────────────────────
+//  ALLOCATION PIE CHART
+// ─────────────────────────────────────────────
+function renderAllocationChart() {
+  const canvas = document.getElementById("allocationChart");
+  if (!canvas || !globalData.length) return;
+
+  if (allocationChartInstance) allocationChartInstance.destroy();
+
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  const tickColor = isDark ? "#94a3b8" : "#64748b";
+
+  const palette = [
+    "#6366f1",
+    "#a855f7",
+    "#ec4899",
+    "#f97316",
+    "#eab308",
+    "#22c55e",
+    "#14b8a6",
+    "#3b82f6",
+    "#f43f5e",
+    "#8b5cf6",
+  ];
+
+  const labels = globalData.map((f) => f.name.split(" ").slice(0, 3).join(" "));
+  const values = globalData.map((f) => Math.round(f.currentNav * f.units));
+  const total = values.reduce((a, b) => a + b, 0);
+
+  allocationChartInstance = new Chart(canvas.getContext("2d"), {
+    type: "doughnut",
+    data: {
+      labels,
+      datasets: [
+        {
+          data: values,
+          backgroundColor: palette,
+          borderWidth: 2,
+          borderColor: isDark ? "#1e293b" : "#fff",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: "65%",
+      plugins: {
+        legend: {
+          position: "right",
+          labels: {
+            color: tickColor,
+            font: { size: 11, weight: "700" },
+            padding: 14,
+            boxWidth: 12,
+          },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const pct = ((ctx.parsed / total) * 100).toFixed(1);
+              return ` ₹${ctx.parsed.toLocaleString("en-IN")} (${pct}%)`;
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────
+//  FUND HISTORY CHART
+// ─────────────────────────────────────────────
 function showHistoryChart(code, days = "all") {
   currentFundDays = days;
   const fund = globalData.find((f) => f.code === code);
   if (!fund) return;
   document.getElementById("history-section").style.display = "block";
   document.getElementById("history-fund-name").innerText = fund.name;
+
   const mode = document.getElementById("fund-display-mode");
   mode.onchange = () => showHistoryChart(code, currentFundDays);
 
-  const filterArr = [7, 30, 90, 180, 365, 1095, "all"],
-    lbls = ["1W", "1M", "3M", "6M", "1Y", "3Y", "ALL"];
+  const filterArr = [7, 30, 90, 180, 365, 1095, "all"];
+  const lbls = ["1W", "1M", "3M", "6M", "1Y", "3Y", "ALL"];
   document.getElementById("fund-filters").innerHTML = filterArr
     .map(
       (f, i) =>
@@ -400,7 +878,7 @@ function showHistoryChart(code, days = "all") {
   if (days !== "all") {
     let filterDate = new Date();
     filterDate.setDate(filterDate.getDate() - days);
-    chartStart = filterDate > firstTxDate ? filterDate : firstTxDate;
+    if (filterDate > firstTxDate) chartStart = filterDate;
   }
 
   const timeline = fund.navHistory
@@ -437,6 +915,11 @@ function showHistoryChart(code, days = "all") {
   });
 
   if (historyChartInstance) historyChartInstance.destroy();
+
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  const gridColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
+  const tickColor = isDark ? "#94a3b8" : "#64748b";
+
   const ds = [
     {
       label: "Value",
@@ -469,15 +952,108 @@ function showHistoryChart(code, days = "all") {
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { labels: { color: tickColor, font: { weight: "700" } } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ` ₹${ctx.parsed.y.toLocaleString("en-IN")}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { color: gridColor },
+            ticks: { color: tickColor, maxTicksLimit: 8 },
+          },
+          y: {
+            grid: { color: gridColor },
+            ticks: {
+              color: tickColor,
+              callback: (v) =>
+                "₹" +
+                (v >= 100000
+                  ? (v / 100000).toFixed(1) + "L"
+                  : v.toLocaleString("en-IN")),
+            },
+          },
+        },
       },
     },
   );
+
+  // Smooth scroll to chart
+  document
+    .getElementById("history-section")
+    .scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// ─────────────────────────────────────────────
+//  EXPORT TO CSV
+// ─────────────────────────────────────────────
+function exportCSV() {
+  if (!globalData.length) {
+    showToast("No data to export.", "warning");
+    return;
+  }
+
+  const headers = [
+    "Fund Name",
+    "Code",
+    "Units",
+    "Net Invested (₹)",
+    "Current Value (₹)",
+    "Returns (₹)",
+    "Returns (%)",
+    "XIRR (%)",
+  ];
+  const rows = globalData.map((f) => {
+    const curVal = f.currentNav * f.units;
+    const retRs = curVal - f.invested;
+    const retPct = f.invested > 0 ? (retRs / f.invested) * 100 : 0;
+    const xirr = safeXIRR([
+      ...f.transactions,
+      { date: new Date(), amount: curVal },
+    ]);
+    return [
+      `"${f.name}"`,
+      f.code,
+      f.units.toFixed(3),
+      Math.round(f.invested),
+      Math.round(curVal),
+      Math.round(retRs),
+      retPct.toFixed(2),
+      xirr.toFixed(2),
+    ];
+  });
+
+  const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `portfolio_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast("Portfolio exported as CSV!", "success");
+}
+
+// ─────────────────────────────────────────────
+//  SAFE XIRR (prevents crashes on bad data)
+// ─────────────────────────────────────────────
+function safeXIRR(cf) {
+  try {
+    if (cf.length < 2) return 0;
+    const result = calculateXIRR(cf);
+    if (!isFinite(result) || isNaN(result)) return 0;
+    return Math.max(-100, Math.min(result, 9999)); // clamp to sane range
+  } catch {
+    return 0;
+  }
 }
 
 function calculateXIRR(cf) {
-  if (cf.length < 2) return 0;
   let x = 0.1;
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 200; i++) {
     let npv = 0,
       dNpv = 0;
     for (const c of cf) {
@@ -486,11 +1062,17 @@ function calculateXIRR(cf) {
       npv += c.amount / s;
       dNpv -= (t * c.amount) / Math.pow(1 + x, t + 1);
     }
+    if (Math.abs(dNpv) < 1e-10) break;
     const nx = x - npv / dNpv;
     if (Math.abs(nx - x) < 0.000001) return nx * 100;
     x = nx;
+    if (!isFinite(x)) throw new Error("XIRR diverged");
   }
   return x * 100;
 }
 
+// ─────────────────────────────────────────────
+//  BOOTSTRAP
+// ─────────────────────────────────────────────
+initTheme();
 init();

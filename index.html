@@ -11,18 +11,23 @@
   </head>
   <body>
     <div class="container">
+      <!-- ── HEADER ── -->
       <header class="header-box">
-        <h1 style="font-weight: 800; letter-spacing: -0.02em">
+        <h1>
           WealthInsight <span style="font-weight: 400; opacity: 0.8">Pro</span>
         </h1>
-        <div class="header-actions" style="margin-top: 20px">
-          <button class="refresh-btn" onclick="init()">Sync Portfolio</button>
+        <div class="header-actions">
+          <button class="refresh-btn" onclick="init()">⟳ Sync Portfolio</button>
+          <button class="refresh-btn" onclick="exportCSV()">
+            ↓ Export CSV
+          </button>
           <button id="theme-toggle" onclick="toggleTheme()">
             <span id="theme-icon">🌙</span>
           </button>
         </div>
       </header>
 
+      <!-- ── ADD TRANSACTION ── -->
       <div class="form-card action-section">
         <div
           class="chart-header"
@@ -74,6 +79,7 @@
         </div>
       </div>
 
+      <!-- ── SUMMARY STATS ── -->
       <div class="summary-grid">
         <div class="stat-card">
           <div class="stat-label">Net Invested</div>
@@ -99,78 +105,161 @@
         </div>
       </div>
 
+      <!-- PERFORMANCE HISTORY -->
       <div class="performance-row">
         <div class="stat-card performance-card">
-          <div class="stat-label">Portfolio Performance History</div>
+          <!-- Header -->
+          <div class="perf-header">
+            <div class="stat-label" style="margin: 0">
+              Portfolio Performance History
+            </div>
+            <div class="perf-legend">
+              <span class="legend-item">
+                <span
+                  class="legend-dot"
+                  style="background: var(--text-muted)"></span>
+                1W–3M: Absolute return
+              </span>
+              <span class="legend-item">
+                <span
+                  class="legend-dot"
+                  style="background: var(--primary)"></span>
+                6M–3Y: XIRR p.a.
+              </span>
+              <span class="legend-item legend-best">
+                <span class="legend-dot" style="background: #f59e0b"></span>
+                Best period
+              </span>
+            </div>
+          </div>
+
+          <!-- Period cells -->
           <div class="returns-grid">
-            <div class="ret-item">
-              <span>1 WEEK</span><b id="ret-1w-amt">₹0</b
-              ><small id="ret-1w-pct">0%</small>
+            <div class="ret-item" id="ret-cell-1w">
+              <span
+                title="Absolute return — gain on money already invested, fresh SIPs excluded"
+                >1 WEEK</span
+              >
+              <b id="ret-1w-amt">—</b>
+              <small id="ret-1w-pct">—</small>
             </div>
-            <div class="ret-item">
-              <span>1 MONTH</span><b id="ret-1m-amt">₹0</b
-              ><small id="ret-1m-pct">0%</small>
+            <div class="ret-item" id="ret-cell-1m">
+              <span
+                title="Absolute return — gain on money already invested, fresh SIPs excluded"
+                >1 MONTH</span
+              >
+              <b id="ret-1m-amt">—</b>
+              <small id="ret-1m-pct">—</small>
             </div>
-            <div class="ret-item">
-              <span>3 MONTHS</span><b id="ret-3m-amt">₹0</b
-              ><small id="ret-3m-pct">0%</small>
+            <div class="ret-item" id="ret-cell-3m">
+              <span
+                title="Absolute return — gain on money already invested, fresh SIPs excluded"
+                >3 MONTHS</span
+              >
+              <b id="ret-3m-amt">—</b>
+              <small id="ret-3m-pct">—</small>
             </div>
-            <div class="ret-item">
-              <span>6 MONTHS</span><b id="ret-6m-amt">₹0</b
-              ><small id="ret-6m-pct">0%</small>
+            <div class="ret-item" id="ret-cell-6m">
+              <span
+                title="Annualised XIRR — rolling, accounts for exact timing of every SIP"
+                >6 MONTHS</span
+              >
+              <b id="ret-6m-amt">—</b>
+              <small id="ret-6m-pct">—</small>
             </div>
-            <div class="ret-item">
-              <span>1 YEAR</span><b id="ret-1y-amt">₹0</b
-              ><small id="ret-1y-pct">0%</small>
+            <div class="ret-item" id="ret-cell-1y">
+              <span
+                title="Annualised XIRR — rolling, accounts for exact timing of every SIP"
+                >1 YEAR</span
+              >
+              <b id="ret-1y-amt">—</b>
+              <small id="ret-1y-pct">—</small>
             </div>
-            <div class="ret-item">
-              <span>3 YEARS</span><b id="ret-3y-amt">₹0</b
-              ><small id="ret-3y-pct">0%</small>
+            <div class="ret-item" id="ret-cell-3y">
+              <span
+                title="Annualised XIRR — rolling, accounts for exact timing of every SIP"
+                >3 YEARS</span
+              >
+              <b id="ret-3y-amt">—</b>
+              <small id="ret-3y-pct">—</small>
             </div>
+          </div>
+
+          <!-- Since inception bar -->
+          <div id="ret-inception" class="inception-bar">—</div>
+        </div>
+      </div>
+
+      <!-- ── TWO-COLUMN: PORTFOLIO GROWTH + ALLOCATION ── -->
+      <div class="charts-row">
+        <div class="form-card flex-chart" id="total-history-section">
+          <div class="chart-header">
+            <h2 style="margin: 0; font-size: 1.1rem">Portfolio Growth</h2>
+            <div class="controls-group">
+              <select
+                id="total-display-mode"
+                class="chart-select"
+                onchange="renderTotalHistoryChart()">
+                <option value="both">Cost vs Value</option>
+                <option value="value">Value Only</option>
+              </select>
+              <div class="filter-group" id="total-filters">
+                <button class="filter-btn" onclick="updateTotalTime(7, this)">
+                  1W
+                </button>
+                <button class="filter-btn" onclick="updateTotalTime(30, this)">
+                  1M
+                </button>
+                <button class="filter-btn" onclick="updateTotalTime(90, this)">
+                  3M
+                </button>
+                <button class="filter-btn" onclick="updateTotalTime(180, this)">
+                  6M
+                </button>
+                <button class="filter-btn" onclick="updateTotalTime(365, this)">
+                  1Y
+                </button>
+                <button
+                  class="filter-btn"
+                  onclick="updateTotalTime(1095, this)">
+                  3Y
+                </button>
+                <button
+                  class="filter-btn active"
+                  onclick="updateTotalTime('all', this)">
+                  ALL
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="line-chart-container">
+            <canvas id="totalHistoryChart"></canvas>
+          </div>
+        </div>
+
+        <div class="form-card flex-chart" id="allocation-section">
+          <div class="chart-header">
+            <h2 style="margin: 0; font-size: 1.1rem">Asset Allocation</h2>
+          </div>
+          <div class="line-chart-container">
+            <canvas id="allocationChart"></canvas>
           </div>
         </div>
       </div>
 
-      <div class="form-card" id="total-history-section">
-        <div class="chart-header">
-          <h2 style="margin: 0; font-size: 1.25rem">Portfolio Growth</h2>
-          <div class="controls-group">
-            <select
-              id="total-display-mode"
-              class="chart-select"
-              onchange="renderTotalHistoryChart()">
-              <option value="both">Cost vs Value</option>
-              <option value="value">Value Only</option>
-            </select>
-            <div class="filter-group" id="total-filters">
-              <button class="filter-btn" onclick="updateTotalTime(7, this)">
-                1W
-              </button>
-              <button class="filter-btn" onclick="updateTotalTime(30, this)">
-                1M
-              </button>
-              <button class="filter-btn" onclick="updateTotalTime(90, this)">
-                3M
-              </button>
-              <button class="filter-btn" onclick="updateTotalTime(180, this)">
-                6M
-              </button>
-              <button class="filter-btn" onclick="updateTotalTime(365, this)">
-                1Y
-              </button>
-              <button class="filter-btn" onclick="updateTotalTime(1095, this)">
-                3Y
-              </button>
-              <button
-                class="filter-btn active"
-                onclick="updateTotalTime('all', this)">
-                ALL
-              </button>
-            </div>
+      <!-- ── PORTFOLIO TABLE ── -->
+      <div class="form-card" style="padding-bottom: 8px">
+        <div class="table-toolbar">
+          <h2 style="margin: 0; font-size: 1.1rem">Holdings</h2>
+          <div class="search-wrap">
+            <span class="search-icon">🔍</span>
+            <input
+              type="text"
+              id="search-input"
+              class="search-input"
+              placeholder="Search fund or code…"
+              oninput="onSearch(this.value)" />
           </div>
-        </div>
-        <div class="line-chart-container">
-          <canvas id="totalHistoryChart"></canvas>
         </div>
       </div>
 
@@ -178,25 +267,32 @@
         <table>
           <thead>
             <tr>
-              <th>Scheme / Code</th>
-              <th>Units</th>
-              <th>Net Invested</th>
-              <th>Value</th>
-              <th>1D Change</th>
-              <th>Returns</th>
-              <th>XIRR</th>
+              <th onclick="onSort('name')" class="sortable">
+                Scheme / Code ${sortIcon('name')}
+              </th>
+              <th onclick="onSort('units')" class="sortable">Units</th>
+              <th onclick="onSort('invested')" class="sortable">
+                Net Invested
+              </th>
+              <th onclick="onSort('value')" class="sortable">Value</th>
+              <th onclick="onSort('dayChange')" class="sortable">1D Change</th>
+              <th onclick="onSort('returns')" class="sortable">Returns</th>
+              <th onclick="onSort('xirr')" class="sortable">XIRR</th>
             </tr>
           </thead>
           <tbody id="portfolio-body"></tbody>
         </table>
       </div>
 
+      <!-- ── FUND HISTORY CHART ── -->
       <div
         id="history-section"
         class="form-card"
-        style="display: none; margin-top: 30px">
+        style="display: none; margin-top: 20px">
         <div class="chart-header">
-          <h3><span id="history-fund-name"></span> Timeline</h3>
+          <h3 style="margin: 0">
+            <span id="history-fund-name"></span> Timeline
+          </h3>
           <div class="controls-group">
             <select id="fund-display-mode" class="chart-select">
               <option value="both">Cost vs Value</option>
@@ -218,6 +314,11 @@
         </div>
       </div>
     </div>
+    <!-- /container -->
+
+    <!-- Toast container injected by JS -->
+    <div id="toast-container"></div>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="script.js"></script>
   </body>
