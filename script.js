@@ -166,7 +166,7 @@ async function submitData() {
   const price = document.getElementById("form-price").value;
 
   if (!rawDate || !schemeId || !units) {
-    showToast("Please fill Date, Scheme Code, and Units.", "warning");
+    showToast("Please fill all details first.", "warning");
     return;
   }
 
@@ -411,6 +411,7 @@ function renderTable() {
       const prevVal = f.prevNav * f.units;
       const retRs = curVal - f.invested;
       const retPct = f.invested > 0 ? (retRs / f.invested) * 100 : 0;
+      const dayRs = curVal - prevVal;
       const dayPct =
         f.prevNav !== 0 ? ((f.currentNav - f.prevNav) / f.prevNav) * 100 : 0;
       gInv += f.invested;
@@ -428,7 +429,10 @@ function renderTable() {
         <td>${f.units.toFixed(3)}</td>
         <td>₹${Math.round(f.invested).toLocaleString("en-IN")}</td>
         <td>₹${Math.round(curVal).toLocaleString("en-IN")}</td>
-        <td class="${dayPct >= 0 ? "gain" : "loss"}">${dayPct >= 0 ? "+" : ""}${dayPct.toFixed(2)}%</td>
+        <td class="${dayRs >= 0 ? "gain" : "loss"}">
+          ₹${Math.round(dayRs).toLocaleString("en-IN")}
+          <small style="display:block;opacity:0.7">${dayPct >= 0 ? "+" : ""}${dayPct.toFixed(2)}%</small>
+        </td>
         <td class="${retRs >= 0 ? "gain" : "loss"}">
           ₹${Math.round(retRs).toLocaleString("en-IN")}
           <small style="display:block;opacity:0.7">${retPct >= 0 ? "+" : ""}${retPct.toFixed(1)}%</small>
@@ -712,8 +716,10 @@ function renderTotalHistoryChart() {
   const gridColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
   const tickColor = isDark ? "#94a3b8" : "#64748b";
 
-  const ds = [
-    {
+  const profitSeries = sorted.map((p) => Math.round(p.cur - p.inv));
+  const ds = [];
+  if (mode === "value" || mode === "both") {
+    ds.push({
       label: "Value",
       data: sorted.map((p) => Math.round(p.cur)),
       borderColor: CHART_CONFIG.valueColor,
@@ -722,9 +728,9 @@ function renderTotalHistoryChart() {
       pointRadius: CHART_CONFIG.pointRadius,
       fill: CHART_CONFIG.fill,
       backgroundColor: CHART_CONFIG.valueBg,
-    },
-  ];
-  if (mode === "both")
+    });
+  }
+  if (mode === "both") {
     ds.push({
       label: "Cost",
       data: sorted.map((p) => Math.round(p.inv)),
@@ -734,6 +740,18 @@ function renderTotalHistoryChart() {
       pointRadius: 0,
       fill: false,
     });
+  }
+  if (mode === "profit") {
+    ds.push({
+      label: "Net Gain",
+      data: profitSeries,
+      borderColor: "#10b981",
+      borderWidth: CHART_CONFIG.borderWidth,
+      tension: CHART_CONFIG.tension,
+      pointRadius: CHART_CONFIG.pointRadius,
+      fill: false,
+    });
+  }
 
   totalHistoryChartInstance = new Chart(
     document.getElementById("totalHistoryChart").getContext("2d"),
@@ -742,6 +760,7 @@ function renderTotalHistoryChart() {
       data: {
         labels: sorted.map((p) =>
           p.date.toLocaleDateString("en-IN", {
+            day: "2-digit",
             month: "short",
             year: "2-digit",
           }),
@@ -908,11 +927,16 @@ function showHistoryChart(code, days = "all") {
       }
     });
     labels.push(
-      tp.date.toLocaleDateString("en-IN", { month: "short", year: "2-digit" }),
+      tp.date.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "2-digit",
+      }),
     );
     costData.push(Math.round(rI));
     valueData.push(Math.round(rU * tp.nav));
   });
+  const profitData = valueData.map((val, idx) => val - costData[idx]);
 
   if (historyChartInstance) historyChartInstance.destroy();
 
@@ -920,8 +944,9 @@ function showHistoryChart(code, days = "all") {
   const gridColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
   const tickColor = isDark ? "#94a3b8" : "#64748b";
 
-  const ds = [
-    {
+  const ds = [];
+  if (mode.value === "value" || mode.value === "both") {
+    ds.push({
       label: "Value",
       data: valueData,
       borderColor: CHART_CONFIG.valueColor,
@@ -930,9 +955,9 @@ function showHistoryChart(code, days = "all") {
       fill: CHART_CONFIG.fill,
       backgroundColor: CHART_CONFIG.valueBg,
       pointRadius: CHART_CONFIG.pointRadius,
-    },
-  ];
-  if (mode.value === "both")
+    });
+  }
+  if (mode.value === "both") {
     ds.push({
       label: "Cost",
       data: costData,
@@ -942,6 +967,29 @@ function showHistoryChart(code, days = "all") {
       tension: 0,
       pointRadius: 0,
     });
+  }
+  if (mode.value === "profit") {
+    ds.push({
+      label: "Net Gain",
+      data: profitData,
+      borderColor: "#10b981",
+      borderWidth: CHART_CONFIG.borderWidth,
+      tension: CHART_CONFIG.tension,
+      pointRadius: CHART_CONFIG.pointRadius,
+      fill: false,
+    });
+  }
+  if (mode.value === "nav") {
+    ds.push({
+      label: "NAV",
+      data: timeline.map((tp) => tp.nav),
+      borderColor: "#10b981",
+      borderWidth: CHART_CONFIG.borderWidth,
+      tension: CHART_CONFIG.tension,
+      pointRadius: CHART_CONFIG.pointRadius,
+      fill: false,
+    });
+  }
 
   historyChartInstance = new Chart(
     document.getElementById("historyChart").getContext("2d"),
@@ -956,7 +1004,12 @@ function showHistoryChart(code, days = "all") {
           legend: { labels: { color: tickColor, font: { weight: "700" } } },
           tooltip: {
             callbacks: {
-              label: (ctx) => ` ₹${ctx.parsed.y.toLocaleString("en-IN")}`,
+              label: (ctx) => {
+                const val = ctx.parsed.y;
+                const formatted =
+                  val % 1 === 0 ? val.toLocaleString("en-IN") : val.toFixed(2);
+                return ` ₹${formatted}`;
+              },
             },
           },
         },
@@ -969,11 +1022,12 @@ function showHistoryChart(code, days = "all") {
             grid: { color: gridColor },
             ticks: {
               color: tickColor,
-              callback: (v) =>
-                "₹" +
-                (v >= 100000
-                  ? (v / 100000).toFixed(1) + "L"
-                  : v.toLocaleString("en-IN")),
+              callback: (v) => {
+                if (v >= 100000) return "₹" + (v / 100000).toFixed(1) + "L";
+                const formatted =
+                  v % 1 === 0 ? v.toLocaleString("en-IN") : v.toFixed(2);
+                return "₹" + formatted;
+              },
             },
           },
         },
@@ -985,6 +1039,25 @@ function showHistoryChart(code, days = "all") {
   document
     .getElementById("history-section")
     .scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function toggleChartFullscreen(sectionId, btn) {
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  const expanded = section.classList.toggle("fullscreen-chart");
+  btn.innerText = expanded ? "🗗" : "⤢";
+  btn.title = expanded ? "Restore chart size" : "Enlarge chart";
+
+  const resizeChart = () => {
+    if (sectionId === "total-history-section" && totalHistoryChartInstance)
+      totalHistoryChartInstance.resize();
+    if (sectionId === "allocation-section" && allocationChartInstance)
+      allocationChartInstance.resize();
+    if (sectionId === "history-section" && historyChartInstance)
+      historyChartInstance.resize();
+  };
+
+  setTimeout(resizeChart, 120);
 }
 
 // ─────────────────────────────────────────────
