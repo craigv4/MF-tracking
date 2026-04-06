@@ -354,6 +354,37 @@ body {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
 }
 
+.display-toggle-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.display-toggle-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-main);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    transform 0.2s;
+}
+
+.display-toggle-btn:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.display-toggle-btn.active {
+  background: var(--card-bg);
+  color: var(--primary);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
 .chart-expand-btn {
   background: transparent;
   border: 1px solid var(--glass-border);

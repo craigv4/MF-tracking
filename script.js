@@ -15,6 +15,7 @@ let historyChartInstance = null;
 let allocationChartInstance = null;
 let currentTotalDays = "all";
 let currentFundDays = "all";
+let currentHistoryCode = null;
 let sortCol = null;
 let sortDir = 1; // 1 = asc, -1 = desc
 let searchQuery = "";
@@ -650,6 +651,41 @@ function getPortfolioValueAt(daysAgo) {
 // ─────────────────────────────────────────────
 //  TOTAL HISTORY CHART
 // ─────────────────────────────────────────────
+function getActiveDisplayModes(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return [];
+  return Array.from(
+    container.querySelectorAll(".display-toggle-btn.active"),
+  ).map((btn) => btn.dataset.mode);
+}
+
+function toggleDisplayMode(containerId, mode, btn, callback) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const activeButtons = container.querySelectorAll(
+    ".display-toggle-btn.active",
+  );
+  const isActive = btn.classList.contains("active");
+
+  if (isActive && activeButtons.length === 1) {
+    return; // always keep at least one active
+  }
+
+  btn.classList.toggle("active");
+  if (callback) callback();
+}
+
+function toggleTotalDisplay(mode, btn) {
+  toggleDisplayMode("total-display-mode", mode, btn, renderTotalHistoryChart);
+}
+
+function toggleFundDisplay(mode, btn) {
+  toggleDisplayMode("fund-display-mode", mode, btn, () => {
+    if (currentHistoryCode)
+      showHistoryChart(currentHistoryCode, currentFundDays);
+  });
+}
+
 function updateTotalTime(days, btn) {
   currentTotalDays = days;
   document
@@ -660,7 +696,7 @@ function updateTotalTime(days, btn) {
 }
 
 function renderTotalHistoryChart() {
-  const mode = document.getElementById("total-display-mode").value;
+  const modes = getActiveDisplayModes("total-display-mode");
   let allTx = globalData.flatMap((f) => f.transactions);
   if (allTx.length === 0) return;
 
@@ -718,7 +754,7 @@ function renderTotalHistoryChart() {
 
   const profitSeries = sorted.map((p) => Math.round(p.cur - p.inv));
   const ds = [];
-  if (mode === "value" || mode === "both") {
+  if (modes.includes("value")) {
     ds.push({
       label: "Value",
       data: sorted.map((p) => Math.round(p.cur)),
@@ -730,7 +766,7 @@ function renderTotalHistoryChart() {
       backgroundColor: CHART_CONFIG.valueBg,
     });
   }
-  if (mode === "both") {
+  if (modes.includes("cost")) {
     ds.push({
       label: "Cost",
       data: sorted.map((p) => Math.round(p.inv)),
@@ -741,7 +777,7 @@ function renderTotalHistoryChart() {
       fill: false,
     });
   }
-  if (mode === "profit") {
+  if (modes.includes("profit")) {
     ds.push({
       label: "Net Gain",
       data: profitSeries,
@@ -750,6 +786,18 @@ function renderTotalHistoryChart() {
       tension: CHART_CONFIG.tension,
       pointRadius: CHART_CONFIG.pointRadius,
       fill: false,
+    });
+  }
+  if (ds.length === 0) {
+    ds.push({
+      label: "Value",
+      data: sorted.map((p) => Math.round(p.cur)),
+      borderColor: CHART_CONFIG.valueColor,
+      borderWidth: CHART_CONFIG.borderWidth,
+      tension: CHART_CONFIG.tension,
+      pointRadius: CHART_CONFIG.pointRadius,
+      fill: CHART_CONFIG.fill,
+      backgroundColor: CHART_CONFIG.valueBg,
     });
   }
 
@@ -880,8 +928,7 @@ function showHistoryChart(code, days = "all") {
   document.getElementById("history-section").style.display = "block";
   document.getElementById("history-fund-name").innerText = fund.name;
 
-  const mode = document.getElementById("fund-display-mode");
-  mode.onchange = () => showHistoryChart(code, currentFundDays);
+  currentHistoryCode = code;
 
   const filterArr = [7, 30, 90, 180, 365, 1095, "all"];
   const lbls = ["1W", "1M", "3M", "6M", "1Y", "3Y", "ALL"];
@@ -944,8 +991,9 @@ function showHistoryChart(code, days = "all") {
   const gridColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
   const tickColor = isDark ? "#94a3b8" : "#64748b";
 
+  const modes = getActiveDisplayModes("fund-display-mode");
   const ds = [];
-  if (mode.value === "value" || mode.value === "both") {
+  if (modes.includes("value")) {
     ds.push({
       label: "Value",
       data: valueData,
@@ -957,7 +1005,7 @@ function showHistoryChart(code, days = "all") {
       pointRadius: CHART_CONFIG.pointRadius,
     });
   }
-  if (mode.value === "both") {
+  if (modes.includes("cost")) {
     ds.push({
       label: "Cost",
       data: costData,
@@ -968,7 +1016,7 @@ function showHistoryChart(code, days = "all") {
       pointRadius: 0,
     });
   }
-  if (mode.value === "profit") {
+  if (modes.includes("profit")) {
     ds.push({
       label: "Net Gain",
       data: profitData,
@@ -979,7 +1027,7 @@ function showHistoryChart(code, days = "all") {
       fill: false,
     });
   }
-  if (mode.value === "nav") {
+  if (modes.includes("nav")) {
     ds.push({
       label: "NAV",
       data: timeline.map((tp) => tp.nav),
@@ -988,6 +1036,18 @@ function showHistoryChart(code, days = "all") {
       tension: CHART_CONFIG.tension,
       pointRadius: CHART_CONFIG.pointRadius,
       fill: false,
+    });
+  }
+  if (ds.length === 0) {
+    ds.push({
+      label: "Value",
+      data: valueData,
+      borderColor: CHART_CONFIG.valueColor,
+      borderWidth: CHART_CONFIG.borderWidth,
+      tension: CHART_CONFIG.tension,
+      fill: CHART_CONFIG.fill,
+      backgroundColor: CHART_CONFIG.valueBg,
+      pointRadius: CHART_CONFIG.pointRadius,
     });
   }
 

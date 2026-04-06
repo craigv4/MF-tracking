@@ -196,14 +196,26 @@
           <div class="chart-header">
             <h2 style="margin: 0; font-size: 1.1rem">Portfolio Growth</h2>
             <div class="controls-group">
-              <select
-                id="total-display-mode"
-                class="chart-select"
-                onchange="renderTotalHistoryChart()">
-                <option value="both">Cost vs Value</option>
-                <option value="value">Value Only</option>
-                <option value="profit">Net Gain</option>
-              </select>
+              <div id="total-display-mode" class="display-toggle-group">
+                <button
+                  class="display-toggle-btn active"
+                  data-mode="value"
+                  onclick="toggleTotalDisplay('value', this)">
+                  Value
+                </button>
+                <button
+                  class="display-toggle-btn active"
+                  data-mode="cost"
+                  onclick="toggleTotalDisplay('cost', this)">
+                  Cost
+                </button>
+                <button
+                  class="display-toggle-btn"
+                  data-mode="profit"
+                  onclick="toggleTotalDisplay('profit', this)">
+                  Net Gain
+                </button>
+              </div>
               <div class="filter-group" id="total-filters">
                 <button class="filter-btn" onclick="updateTotalTime(7, this)">
                   1W
@@ -309,12 +321,32 @@
             <span id="history-fund-name"></span> Timeline
           </h3>
           <div class="controls-group">
-            <select id="fund-display-mode" class="chart-select">
-              <option value="both">Value vs Cost</option>
-              <option value="value">Value Only</option>
-              <option value="nav">NAV Price</option>
-              <option value="profit">Net Gain</option>
-            </select>
+            <div id="fund-display-mode" class="display-toggle-group">
+              <button
+                class="display-toggle-btn active"
+                data-mode="value"
+                onclick="toggleFundDisplay('value', this)">
+                Value
+              </button>
+              <button
+                class="display-toggle-btn active"
+                data-mode="cost"
+                onclick="toggleFundDisplay('cost', this)">
+                Cost
+              </button>
+              <button
+                class="display-toggle-btn"
+                data-mode="nav"
+                onclick="toggleFundDisplay('nav', this)">
+                NAV
+              </button>
+              <button
+                class="display-toggle-btn"
+                data-mode="profit"
+                onclick="toggleFundDisplay('profit', this)">
+                Net Gain
+              </button>
+            </div>
             <div class="filter-group" id="fund-filters"></div>
             <button
               class="chart-expand-btn"
