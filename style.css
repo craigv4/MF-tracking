@@ -199,6 +199,52 @@ body {
   font-weight: 700;
   color: var(--text-muted);
 }
+.perf-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+}
+.perf-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 160px;
+}
+.perf-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+.perf-result-box {
+  background: var(--bg-color);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  padding: 18px;
+}
+.perf-result-box span {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.perf-result-box b {
+  display: block;
+  font-size: 1.2rem;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+.perf-result-box small {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
 .legend-dot {
   width: 7px;
   height: 7px;

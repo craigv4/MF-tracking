@@ -108,7 +108,6 @@
       <!-- PERFORMANCE HISTORY -->
       <div class="performance-row">
         <div class="stat-card performance-card">
-          <!-- Header -->
           <div class="perf-header">
             <div class="stat-label" style="margin: 0">
               Portfolio Performance History
@@ -117,76 +116,55 @@
               <span class="legend-item">
                 <span
                   class="legend-dot"
-                  style="background: var(--text-muted)"></span>
-                1W–3M: Absolute return
-              </span>
-              <span class="legend-item">
-                <span
-                  class="legend-dot"
                   style="background: var(--primary)"></span>
-                6M–3Y: XIRR p.a.
-              </span>
-              <span class="legend-item legend-best">
-                <span class="legend-dot" style="background: #f59e0b"></span>
-                Best period
+                Absolute change + percentage
               </span>
             </div>
           </div>
 
-          <!-- Period cells -->
-          <div class="returns-grid">
-            <div class="ret-item" id="ret-cell-1w">
-              <span
-                title="Absolute return — gain on money already invested, fresh SIPs excluded"
-                >1 WEEK</span
-              >
-              <b id="ret-1w-amt">—</b>
-              <small id="ret-1w-pct">—</small>
-            </div>
-            <div class="ret-item" id="ret-cell-1m">
-              <span
-                title="Absolute return — gain on money already invested, fresh SIPs excluded"
-                >1 MONTH</span
-              >
-              <b id="ret-1m-amt">—</b>
-              <small id="ret-1m-pct">—</small>
-            </div>
-            <div class="ret-item" id="ret-cell-3m">
-              <span
-                title="Absolute return — gain on money already invested, fresh SIPs excluded"
-                >3 MONTHS</span
-              >
-              <b id="ret-3m-amt">—</b>
-              <small id="ret-3m-pct">—</small>
-            </div>
-            <div class="ret-item" id="ret-cell-6m">
-              <span
-                title="Annualised XIRR — rolling, accounts for exact timing of every SIP"
-                >6 MONTHS</span
-              >
-              <b id="ret-6m-amt">—</b>
-              <small id="ret-6m-pct">—</small>
-            </div>
-            <div class="ret-item" id="ret-cell-1y">
-              <span
-                title="Annualised XIRR — rolling, accounts for exact timing of every SIP"
-                >1 YEAR</span
-              >
-              <b id="ret-1y-amt">—</b>
-              <small id="ret-1y-pct">—</small>
-            </div>
-            <div class="ret-item" id="ret-cell-3y">
-              <span
-                title="Annualised XIRR — rolling, accounts for exact timing of every SIP"
-                >3 YEARS</span
-              >
-              <b id="ret-3y-amt">—</b>
-              <small id="ret-3y-pct">—</small>
-            </div>
+          <div class="perf-controls">
+            <label>
+              Value change
+              <select
+                id="history-value-select"
+                class="chart-select"
+                onchange="updateHistoryPeriod('value', this.value)">
+                <option value="7">1W</option>
+                <option value="30" selected>1M</option>
+                <option value="180">6M</option>
+                <option value="365">1Y</option>
+                <option value="1095">3Y</option>
+                <option value="1825">5Y</option>
+              </select>
+            </label>
+            <label>
+              Cost change
+              <select
+                id="history-cost-select"
+                class="chart-select"
+                onchange="updateHistoryPeriod('cost', this.value)">
+                <option value="7">1W</option>
+                <option value="30" selected>1M</option>
+                <option value="180">6M</option>
+                <option value="365">1Y</option>
+                <option value="1095">3Y</option>
+                <option value="1825">5Y</option>
+              </select>
+            </label>
           </div>
 
-          <!-- Since inception bar -->
-          <div id="ret-inception" class="inception-bar">—</div>
+          <div class="perf-results">
+            <div class="perf-result-box">
+              <span>Value change</span>
+              <b id="history-value-amt">—</b>
+              <small id="history-value-pct">—</small>
+            </div>
+            <div class="perf-result-box">
+              <span>Cost change</span>
+              <b id="history-cost-amt">—</b>
+              <small id="history-cost-pct">—</small>
+            </div>
+          </div>
         </div>
       </div>
 

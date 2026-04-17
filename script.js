@@ -14,6 +14,8 @@ let totalHistoryChartInstance = null;
 let historyChartInstance = null;
 let allocationChartInstance = null;
 let currentTotalDays = "all";
+let currentHistoryValueDays = 30;
+let currentHistoryCostDays = 30;
 let currentFundDays = "all";
 let currentHistoryCode = null;
 let sortCol = null;
@@ -483,112 +485,7 @@ function renderTable() {
   dayEl.className = `stat-value ${dayDiff >= 0 ? "gain" : "loss"}`;
   dayEl.innerText = `${dayDiff >= 0 ? "+" : ""}₹${Math.round(dayDiff).toLocaleString("en-IN")} (${dayTotalPct.toFixed(2)}%)`;
 
-  // ── Performance History: Hybrid Absolute (≤3M) + XIRR (≥6M) ───────────────
-  //
-  //  For every period:
-  //    Gain ₹  = Ending Value − Opening Value − Fresh Buys in window + Redemptions
-  //              → pure wealth added by the market, fresh SIPs stripped out
-  //    % short = Gain ÷ Opening Value  (Absolute — XIRR is noisy over days/weeks)
-  //    % long  = Rolling XIRR on [opening as outflow + in-period txs + current value]
-  //              → annualised, accounts for exact SIP timing, same as Kuvera/Groww
-  //
-  //  Also computes:
-  //    • Best performing period  → highlighted with accent border
-  //    • Since-inception summary → total gain ₹ + overall XIRR + days invested
-
-  const periods = [
-    { k: "1w", d: 7, useXIRR: false },
-    { k: "1m", d: 30, useXIRR: false },
-    { k: "3m", d: 90, useXIRR: false },
-    { k: "6m", d: 180, useXIRR: true },
-    { k: "1y", d: 365, useXIRR: true },
-    { k: "3y", d: 1095, useXIRR: true },
-  ];
-
-  // Collect computed values so we can find the best performer
-  const periodResults = [];
-
-  periods.forEach((p) => {
-    const periodStart = new Date();
-    periodStart.setDate(periodStart.getDate() - p.d);
-
-    const openingVal = getPortfolioValueAt(p.d);
-
-    if (openingVal <= 0) {
-      periodResults.push({ k: p.k, gainAmt: null, pct: null });
-      return;
-    }
-
-    // Fresh buys within this window (negative amount = outflow/buy)
-    const freshCapital = tFlows
-      .filter((tx) => tx.date > periodStart && tx.amount < 0)
-      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-
-    // Redemptions within this window (positive amount = inflow/sell)
-    const redemptions = tFlows
-      .filter((tx) => tx.date > periodStart && tx.amount > 0)
-      .reduce((sum, tx) => sum + tx.amount, 0);
-
-    // Pure market gain — fresh capital stripped out
-    const gainAmt = tCur - openingVal - freshCapital + redemptions;
-
-    let pct, pctLabel;
-    if (p.useXIRR) {
-      // Build mini cash-flow: opening as buy → in-period txs → current value
-      const flows = [
-        { date: periodStart, amount: -openingVal },
-        ...tFlows.filter((tx) => tx.date > periodStart),
-        { date: new Date(), amount: tCur },
-      ];
-      pct = safeXIRR(flows);
-      pctLabel = "p.a.";
-    } else {
-      pct = openingVal > 0 ? (gainAmt / openingVal) * 100 : 0;
-      pctLabel = "abs";
-    }
-
-    periodResults.push({ k: p.k, gainAmt, pct, pctLabel, useXIRR: p.useXIRR });
-  });
-
-  // Find best period (highest % among valid periods)
-  const validPcts = periodResults.filter((r) => r.pct !== null);
-  const bestPeriod = validPcts.length
-    ? validPcts.reduce((best, r) => (r.pct > best.pct ? r : best), validPcts[0])
-    : null;
-
-  // Render each period cell
-  periodResults.forEach((r) => {
-    const amtEl = document.getElementById(`ret-${r.k}-amt`);
-    const pctEl = document.getElementById(`ret-${r.k}-pct`);
-    const cell = document.getElementById(`ret-cell-${r.k}`);
-    if (!amtEl) return;
-
-    if (r.gainAmt === null) {
-      amtEl.innerText = "N/A";
-      amtEl.className = "";
-      pctEl.innerText = "—";
-      pctEl.className = "";
-      if (cell) cell.classList.remove("best-period");
-      return;
-    }
-
-    const cls = r.gainAmt >= 0 ? "gain" : "loss";
-    amtEl.className = cls;
-    pctEl.className = cls;
-    amtEl.innerText =
-      (r.gainAmt >= 0 ? "+" : "-") +
-      "₹" +
-      Math.round(Math.abs(r.gainAmt)).toLocaleString("en-IN");
-    pctEl.innerHTML = `${r.pct >= 0 ? "+" : ""}${r.pct.toFixed(2)}% <em>${r.pctLabel}</em>`;
-
-    // Highlight best performer
-    if (cell) {
-      cell.classList.toggle(
-        "best-period",
-        bestPeriod && r.k === bestPeriod.k && r.gainAmt > 0,
-      );
-    }
-  });
+  renderPerformanceHistory();
 
   // ── Since Inception ──────────────────────────────────────────────────────
   const inceptionDate = tFlows.length
@@ -646,6 +543,93 @@ function getPortfolioValueAt(daysAgo) {
     totalVal += unitsAtTime * nav;
   });
   return totalVal;
+}
+
+function getPortfolioInvestedAt(daysAgo) {
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() - daysAgo);
+  let totalInvested = 0;
+
+  globalData.forEach((fund) => {
+    let invested = 0;
+    let units = 0;
+    fund.transactions.forEach((tx) => {
+      if (tx.date <= targetDate) {
+        if (tx.units > 0) {
+          invested += Math.abs(tx.amount);
+          units += tx.units;
+        } else {
+          const avg = units > 0 ? invested / units : 0;
+          invested -= avg * Math.abs(tx.units);
+          units += tx.units;
+        }
+      }
+    });
+    totalInvested += invested;
+  });
+
+  return totalInvested;
+}
+
+function updateHistoryPeriod(type, days) {
+  const periodDays = parseInt(days, 10);
+  if (type === "value") {
+    currentHistoryValueDays = periodDays;
+  } else if (type === "cost") {
+    currentHistoryCostDays = periodDays;
+  }
+  renderPerformanceHistory();
+}
+
+function renderPerformanceHistory() {
+  if (!globalData.length) return;
+
+  const currentValue = globalData.reduce(
+    (sum, fund) => sum + fund.currentNav * fund.units,
+    0,
+  );
+  const currentCost = globalData.reduce((sum, fund) => sum + fund.invested, 0);
+
+  const valueAtStart = getPortfolioValueAt(currentHistoryValueDays);
+  const costAtStart = getPortfolioInvestedAt(currentHistoryCostDays);
+
+  const valueChange = currentValue - valueAtStart;
+  const costChange = currentCost - costAtStart;
+  const valuePct = valueAtStart > 0 ? (valueChange / valueAtStart) * 100 : null;
+  const costPct = costAtStart > 0 ? (costChange / costAtStart) * 100 : null;
+
+  const valueAmtEl = document.getElementById("history-value-amt");
+  const valuePctEl = document.getElementById("history-value-pct");
+  const costAmtEl = document.getElementById("history-cost-amt");
+  const costPctEl = document.getElementById("history-cost-pct");
+
+  if (valueAmtEl && valuePctEl) {
+    const cls = valueChange >= 0 ? "gain" : "loss";
+    valueAmtEl.className = cls;
+    valueAmtEl.innerText =
+      (valueChange >= 0 ? "+" : "-") +
+      "₹" +
+      Math.round(Math.abs(valueChange)).toLocaleString("en-IN");
+    valuePctEl.className = cls;
+    valuePctEl.innerText =
+      valuePct === null
+        ? "—"
+        : `${valuePct >= 0 ? "+" : ""}${valuePct.toFixed(2)}%`;
+  }
+
+  if (costAmtEl && costPctEl) {
+    const cls = costChange >= 0 ? "gain" : "loss";
+    costAmtEl.className = cls;
+    costAmtEl.innerText =
+      (costChange >= 0 ? "+" : "-") +
+      "₹" +
+      Math.round(Math.abs(costChange)).toLocaleString("en-IN");
+    costPctEl.className = cls;
+    costPctEl.innerText =
+      costPct === null
+        ? "—"
+        : `${costPct >= 0 ? "+" : ""}${costPct.toFixed(2)}%`;
+  }
 }
 
 // ─────────────────────────────────────────────
